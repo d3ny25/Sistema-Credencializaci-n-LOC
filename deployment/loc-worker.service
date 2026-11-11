@@ -1,0 +1,23 @@
+[Unit]
+Description=Worker de Colas para Importaciones Masivas LOC 139
+After=network.target mysql.service mariadb.service redis.service
+Requires=network.target
+
+[Service]
+Type=simple
+User=www-data
+Group=www-data
+WorkingDirectory=/var/www/sistema-de-credencializacion-loc/laravel-app
+ExecStart=/usr/bin/php /var/www/sistema-de-credencializacion-loc/laravel-app/artisan queue:work --queue=default,loc_imports,loc-imports,loc_credentials,loc-credentials-imports,loc_weapons,loc-weapons-imports --sleep=3 --tries=1 --timeout=3600 --memory=512
+Restart=always
+RestartSec=5
+TimeoutStopSec=3600
+StandardOutput=append:/var/log/loc-worker.log
+StandardError=append:/var/log/loc-worker.error.log
+KillSignal=SIGTERM
+SendSIGKILL=yes
+LimitNOFILE=65535
+
+[Install]
+WantedBy=multi-user.target
+

@@ -1,0 +1,24 @@
+
+services:
+  loc-mariadb:
+    image: mariadb:11.4
+    container_name: loc-mariadb
+    restart: unless-stopped
+    environment:
+      MARIADB_ROOT_PASSWORD: ${LOC_MARIADB_ROOT_PASSWORD:?Define LOC_MARIADB_ROOT_PASSWORD}
+      MARIADB_DATABASE: loc_credencializacion
+      MARIADB_USER: loc_app
+      MARIADB_PASSWORD: ${LOC_MARIADB_PASSWORD:?Define LOC_MARIADB_PASSWORD}
+    ports:
+      - "127.0.0.1:3308:3306"
+    volumes:
+      - loc_mariadb_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+volumes:
+  loc_mariadb_data:
