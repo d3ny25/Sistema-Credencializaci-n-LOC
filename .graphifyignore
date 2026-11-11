@@ -1,0 +1,24 @@
+
+# Secretos
+.env
+.env.*
+*.pem
+*.key
+
+# Dependencias y archivos generados
+vendor/
+node_modules/
+storage/
+bootstrap/cache/
+graphify-out/
+
+# Bases de datos y respaldos
+database/*.sqlite
+database/*.db
+database/backups/
+
+# Datos importados y exportados
+*.xlsx
+*.xls
+*.csv
+*.log
