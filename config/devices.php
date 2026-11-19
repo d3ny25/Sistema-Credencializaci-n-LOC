@@ -8,6 +8,15 @@ $userIds = static function (string $key): array {
 };
 
 return [
+    // Agente local de la estación (agente-estacion/): solo escucha en 127.0.0.1. El secreto se comparte con el
+    // agente al instalarlo y firma los tickets de captura; sin secreto, la captura por agente queda deshabilitada.
+    'agente_estacion' => [
+        'url' => env('ESTACION_AGENTE_URL', 'http://127.0.0.1:47391'),
+        'secreto' => env('ESTACION_AGENTE_SECRETO'),
+        'ticket_segundos' => (int) env('ESTACION_AGENTE_TICKET_SEGUNDOS', 600),
+        // Cola de Windows de la impresora de credenciales (comprobada en la estación con Get-Printer, 15-11-2026).
+        'cola_impresora' => env('ESTACION_IMPRESORA_COLA', 'Zebra ZXP Series 7 USB Card Printer'),
+    ],
     'permissions' => [
         'viewer_user_ids' => $userIds('DEVICE_VIEWER_IDS'),
         'manager_user_ids' => $userIds('DEVICE_MANAGER_IDS'),
@@ -15,6 +24,30 @@ return [
         'administrator_user_ids' => $userIds('DEVICE_ADMINISTRATOR_IDS'),
     ],
     'types' => [
+        // Impresora real de la estación: cola "Zebra ZXP Series 7 USB Card Printer", controlador zxps7.inf 3.2.9.0, USB001.
+        'zebra_zxp_series_7' => [
+            'label' => 'Impresora de credenciales',
+            'name' => 'Zebra ZXP Series 7',
+            'manufacturer' => 'Zebra',
+            'model' => 'ZXP Series 7',
+            'connection_methods' => [
+                'windows_print_dialog' => 'Diálogo de impresión + controlador Zebra de Windows (seguimiento de cola con el agente de estación)',
+            ],
+            'configuration' => [
+                'offset_x_mm' => [
+                    'label' => 'Ajuste horizontal (mm)',
+                    'input' => 'number',
+                    'step' => '0.1',
+                    'rules' => ['numeric', 'between:-10,10'],
+                ],
+                'offset_y_mm' => [
+                    'label' => 'Ajuste vertical (mm)',
+                    'input' => 'number',
+                    'step' => '0.1',
+                    'rules' => ['numeric', 'between:-10,10'],
+                ],
+            ],
+        ],
         'zebra_zxp_series_8' => [
             'label' => 'Impresora de credenciales',
             'name' => 'Zebra ZXP Series 8',

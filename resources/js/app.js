@@ -1,7 +1,16 @@
 import './bootstrap';
 import './credential-template-editor';
+import { crearCapturaTopaz } from './topaz-signature';
+import { crearCapturaCanon, crearCapturaHuella } from './canon-agente';
+import { crearSeguimientoImpresion } from './impresion-agente';
+import { crearNavegacionEntrega } from './entrega-navegacion';
 import Alpine from 'alpinejs';
 
+window.crearCapturaTopaz = crearCapturaTopaz;
+window.crearCapturaCanon = crearCapturaCanon;
+window.crearCapturaHuella = crearCapturaHuella;
+window.crearSeguimientoImpresion = crearSeguimientoImpresion;
+window.crearNavegacionEntrega = crearNavegacionEntrega;
 window.Alpine = Alpine;
 Alpine.start();
 

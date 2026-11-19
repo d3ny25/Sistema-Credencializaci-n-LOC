@@ -11,18 +11,11 @@
         El servidor Laravel no tiene acceso directo al USB, a las carpetas locales, a SigWeb ni al controlador Zebra de cada estación. Los diagnósticos desde aquí se registran como <strong>no disponibles</strong>; no comprueban la conexión física ni envían trabajos de impresión.
     </div>
 
-    <div class="mb-5 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        @foreach ([
-            ['label' => 'Dispositivos registrados', 'value' => $summary['total']],
-            ['label' => 'Habilitados', 'value' => $summary['enabled']],
-            ['label' => 'Pendientes de verificación', 'value' => $summary['pending']],
-            ['label' => 'Fuera de servicio', 'value' => $summary['out_of_service']],
-        ] as $metric)
-            <div class="rounded-lg border border-slate-200 bg-white p-4">
-                <p class="text-xs font-medium text-tx-soft">{{ $metric['label'] }}</p>
-                <p class="mt-2 text-2xl font-semibold text-inst-900">{{ number_format($metric['value']) }}</p>
-            </div>
-        @endforeach
+    <div class="mb-5 grid grid-cols-2 gap-4 xl:grid-cols-4">
+        <x-kpi label="Dispositivos registrados" :value="number_format($summary['total'])" icon="device" tone="info"/>
+        <x-kpi label="Habilitados" :value="number_format($summary['enabled'])" icon="check" tone="success"/>
+        <x-kpi label="Pendientes de verificación" :value="number_format($summary['pending'])" icon="clock" tone="warning"/>
+        <x-kpi label="Fuera de servicio" :value="number_format($summary['out_of_service'])" icon="alert" :tone="$summary['out_of_service'] > 0 ? 'danger' : 'neutral'"/>
     </div>
 
     <div class="mb-4 flex flex-wrap items-end justify-between gap-3">

@@ -6,11 +6,14 @@ namespace App\Http\Controllers;
 
 use App\Enums\BiometricoAmbito;
 use App\Enums\BiometricoCategoria;
+use App\Enums\EstadoEmision;
+use App\Exceptions\SequenceNotInitializedException;
 use App\Http\Requests\UpdateBiometricoElementoRequest;
 use App\Models\BiometricoArchivo;
 use App\Models\BiometricoAuditoria;
 use App\Models\BiometricoExpediente;
 use App\Models\CredencialEmitida;
+use App\Models\CredencialImpresion;
 use App\Models\CredentialTemplate;
 use App\Models\LocCatalogoVersion;
 use App\Models\SolicitudCredencial;
@@ -18,9 +21,13 @@ use App\Models\SolicitudElemento;
 use App\Services\BiometricDeliveryService;
 use App\Services\BiometricResolverService;
 use App\Services\BiometricUpdateService;
+use App\Services\CredencialPreparacionService;
+use App\Services\SolicitudTarjetaSequenceService;
+use App\Support\CapturaTicket;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
 use Throwable;
@@ -45,6 +52,12 @@ class PrintQueueController extends Controller
      */
     public function elementosPorTarjeta(Request $request, SolicitudCredencial $solicitud): JsonResponse
     {
+        abort_unless($request->user()?->can('access-print-queue'), 403, 'No cuenta con autorización para consultar la cola de impresión.');
+
+        if ($rechazo = $this->rechazarSiNoAutorizada($solicitud)) {
+            return $rechazo;
+        }
+
         $elementos = $solicitud->elementos()
             ->where('resultado_prefiltro', 'Apto')
             ->with([
@@ -64,7 +77,7 @@ class PrintQueueController extends Controller
         $totalAptos = $elementos->count();
         $totalListos = $elementos->where('estado_tramite', 'listo_impresion')->count();
         $totalPendientes = $elementos->where('estado_tramite', '!=', 'listo_impresion')->count();
-        $totalImpresos = $elementos->filter(fn (SolicitudElemento $e) => $e->credencialEmitida?->estado_emision === 'emitida')->count();
+        $totalImpresos = $elementos->filter(fn (SolicitudElemento $e) => $e->credencialEmitida?->estado_emision === EstadoEmision::EMITIDA->value)->count();
 
         $data = $elementos->map(function (SolicitudElemento $elem): array {
             $nombreOficial = $elem->persona?->nombre;
@@ -87,6 +100,7 @@ class PrintQueueController extends Controller
                 'biometrico_expediente_id' => $elem->biometrico_expediente_id,
                 'tiene_expediente' => $elem->biometrico_expediente_id !== null,
                 'es_completo' => (bool) ($expediente?->es_completo ?? false),
+                'biometricos' => $this->estadoComponentesBiometricos($expediente),
                 'folio' => $credencial?->folio,
                 'estado_emision' => $credencial?->estado_emision,
                 'puede_imprimir' => $elem->estado_tramite === 'listo_impresion' && ! empty($credencial?->folio),
@@ -116,24 +130,26 @@ class PrintQueueController extends Controller
     public function validarBiometriaPorTarjeta(
         Request $request,
         SolicitudCredencial $solicitud,
-        BiometricResolverService $resolverService
+        BiometricResolverService $resolverService,
+        SolicitudTarjetaSequenceService $sequenceService
     ): JsonResponse {
         $user = $request->user();
 
+        // Asignar folios exige el mismo permiso que consultar la cola; ya no basta ser responsable del expediente.
         abort_unless(
-            $user && (
-                in_array($user->role, ['superadmin', 'administrador', 'impresion', 'operador', 'local_demo'], true) ||
-                ($solicitud->usuario_responsable_id !== null && (int) $solicitud->usuario_responsable_id === (int) $user->id) ||
-                app()->environment('local', 'testing')
-            ),
+            $user?->can('access-print-queue'),
             403,
             'No cuenta con autorización para validar e imprimir credenciales en esta tarjeta de trabajo.'
         );
 
+        if ($rechazo = $this->rechazarSiNoAutorizada($solicitud)) {
+            return $rechazo;
+        }
+
         $elementoIds = $request->input('elementos', []);
 
         try {
-            $resultado = DB::transaction(function () use ($solicitud, $elementoIds, $resolverService, $user): array {
+            $resultado = DB::transaction(function () use ($solicitud, $elementoIds, $resolverService, $sequenceService, $user): array {
                 // Bloqueo pesimista de la solicitud
                 /** @var SolicitudCredencial $solicitudLocked */
                 $solicitudLocked = SolicitudCredencial::whereKey($solicitud->id)
@@ -330,7 +346,8 @@ class PrintQueueController extends Controller
                     // D2: Generación atómica de Folio y Registro de Emisión
                     $credencial = $elem->credencialEmitida;
                     if (! $credencial) {
-                        $folio = $this->generarFolio($elem, $solicitudLocked);
+                        // Única fuente de numeración: secuencia folio_credencial (bloqueo de fila, misma transacción).
+                        $folio = $sequenceService->generateNextFolio();
 
                         $credencial = CredencialEmitida::create([
                             'solicitud_id' => $solicitudLocked->id,
@@ -341,7 +358,8 @@ class PrintQueueController extends Controller
                             'estado_emision' => 'pendiente',
                             'estado_entrega' => 'pendiente',
                             'fecha_emision' => null,
-                            'emitida_por_user_id' => $user?->id,
+                            'folio_asignado_por_user_id' => $user?->id,
+                            'emitida_por_user_id' => null,
                             'observaciones' => 'Validación biométrica 4/4 exitosa en cola de impresión.',
                         ]);
                     } else {
@@ -374,7 +392,7 @@ class PrintQueueController extends Controller
                     ];
                 }
 
-                $totalImpresos = $elementos->filter(fn (SolicitudElemento $e) => $e->credencialEmitida?->estado_emision === 'emitida')->count();
+                $totalImpresos = $elementos->filter(fn (SolicitudElemento $e) => $e->credencialEmitida?->estado_emision === EstadoEmision::EMITIDA->value)->count();
 
                 return [
                     'success' => true,
@@ -396,54 +414,17 @@ class PrintQueueController extends Controller
                 'message' => $e->getMessage(),
                 'errors' => $e->errors(),
             ], 422);
+        } catch (SequenceNotInitializedException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'No es posible asignar folios: la secuencia institucional de folios no está inicializada. No se registró ninguna credencial.',
+            ], 409);
         } catch (Throwable $e) {
             return response()->json([
                 'success' => false,
                 'message' => 'Error durante la validación biométrica: ' . $e->getMessage(),
             ], 500);
         }
-    }
-
-    /**
-     * Genera de forma atómica y determinista el folio institucional consecutivo.
-     */
-    protected function generarFolio(SolicitudElemento $elemento, SolicitudCredencial $solicitud): string
-    {
-        $anio = date('Y');
-
-        // 1. Consecutivo atómico desde la tabla de secuencias si existe
-        $secuencia = DB::table('solicitud_secuencias')
-            ->where('clave', 'folio_credencial')
-            ->lockForUpdate()
-            ->first();
-
-        if ($secuencia !== null) {
-            $siguiente = ((int) $secuencia->ultimo_consecutivo) + 1;
-            DB::table('solicitud_secuencias')
-                ->where('clave', 'folio_credencial')
-                ->update([
-                    'ultimo_consecutivo' => $siguiente,
-                    'updated_at' => now(),
-                ]);
-
-            return sprintf('FOL-%s-%05d', $anio, $siguiente);
-        }
-
-        // 2. Fallback determinista basado en el ID de emisión y elemento
-        $ultimoId = (int) DB::table('credenciales_emitidas')->max('id');
-        $consecutivo = max($ultimoId + 1, (int) $elemento->id);
-
-        $folio = sprintf('FOL-%s-%05d', $anio, $consecutivo);
-
-        // Prevenir colisiones eventuales de clave única
-        $intentos = 0;
-        while (CredencialEmitida::where('folio', $folio)->exists() && $intentos < 50) {
-            $consecutivo++;
-            $folio = sprintf('FOL-%s-%05d', $anio, $consecutivo);
-            $intentos++;
-        }
-
-        return $folio;
     }
 
     /**
@@ -475,13 +456,32 @@ class PrintQueueController extends Controller
             $elemento->save();
         }
 
+        // Una tarjeta recién autorizada aún no pasa por "Validar biometría": se vincula el expediente
+        // existente (CUIP + ámbito) para no mostrar como faltantes archivos que sí están en el repositorio.
+        if ($elemento->biometrico_expediente_id === null && $elemento->canAssociateExpediente()) {
+            $expediente = BiometricoExpediente::query()
+                ->where('cuip', $elemento->cuip)
+                ->where('ambito', $elemento->ambito_biometrico->value)
+                ->first();
+
+            if ($expediente !== null) {
+                $elemento = $resolverService->asociarExpedienteAElemento($elemento, $expediente, $user->id)
+                    ->load([
+                        'solicitud', 'persona.vigencias', 'armaCorta', 'armaLarga', 'credencialEmitida',
+                        'expedienteBiometrico.foto', 'expedienteBiometrico.firma',
+                        'expedienteBiometrico.pulgarDerecho', 'expedienteBiometrico.pulgarIzquierdo',
+                    ]);
+            }
+        }
+
         $requestedVersion = (string) $request->input('template_version', $request->input('template', ''));
         if (in_array($requestedVersion, ['2', 'v2', 'version_2'], true)) {
             $templateV2 = CredentialTemplate::query()
                 ->where('slug', CredentialTemplateController::SLUG_V2)
                 ->first();
-            $config = $templateV2?->template_config ?? $templateV2?->published_config ?? config('credential-templates.version_2') ?? config('credential-templates.default');
-            $templateVersion = $templateV2?->current_version ?? $templateV2?->published_version ?? 2;
+            // Solo la versión aprobada se imprime; los borradores se revisan en el editor.
+            $config = $templateV2?->published_config ?? config('credential-templates.version_2') ?? config('credential-templates.default');
+            $templateVersion = $templateV2?->published_version ?? 2;
         } else {
             $template = CredentialTemplate::query()
                 ->where('slug', CredentialTemplateController::SLUG_V1)
@@ -584,6 +584,11 @@ class PrintQueueController extends Controller
             ],
         ];
 
+        // Estado técnico por componente (mismo criterio de la validación 4/4) para la estación biométrica.
+        foreach ($this->estadoComponentesBiometricos($exp) ?? [] as $slot => $evaluacion) {
+            $biometricos[$slot] += $evaluacion;
+        }
+
         // Mapeo de recursos institucionales fijos en plantilla (firmas institucionales)
         $recursosPlantilla = [];
         foreach (['front', 'rear'] as $face) {
@@ -625,7 +630,7 @@ class PrintQueueController extends Controller
                 'ambito' => $elemento->ambito_biometrico?->value ?? 'NO_RESUELTO',
                 'estado_tramite' => (string) $elemento->estado_tramite,
                 'puede_imprimir' => $elemento->estado_tramite === 'listo_impresion' && ! empty($credencial?->folio),
-                'inmutable' => $credencial?->estado_emision === 'emitida',
+                'inmutable' => $credencial?->estado_emision === EstadoEmision::EMITIDA->value,
             ],
             'template' => [
                 'version' => $templateVersion,
@@ -720,13 +725,21 @@ class PrintQueueController extends Controller
         $file = $request->file('archivo');
         $motivo = (string) $request->input('motivo_cambio');
 
-        $resultado = $updateService->actualizarBiometrico(
-            $elemento,
-            $cat,
-            $file,
-            $motivo,
-            $request->user()
-        );
+        try {
+            $resultado = $updateService->actualizarBiometrico(
+                $elemento,
+                $cat,
+                $file,
+                $motivo,
+                $request->user()
+            );
+        } catch (Throwable $e) {
+            // El validador ya consumió el ticket; como no se guardó nada, se libera para poder reintentar la captura.
+            if ($request->filled('captura_ticket')) {
+                CapturaTicket::liberar((string) $request->input('captura_ticket'));
+            }
+            throw $e;
+        }
 
         $streamUrl = route('impresion.elemento.biometrico.stream', [
             'elemento' => $elemento->id,
@@ -744,5 +757,125 @@ class PrintQueueController extends Controller
             'estado_tramite' => $resultado['elemento']->estado_tramite,
             'stream_url' => $streamUrl,
         ]);
+    }
+
+    /**
+     * Ticket de un solo uso para iniciar una captura fotográfica con el agente local de la estación (cámara Canon).
+     * La fotografía resultante solo podrá guardarse en este elemento, por este usuario.
+     */
+    public function ticketCaptura(Request $request, SolicitudElemento $elemento): JsonResponse
+    {
+        abort_unless($request->user()?->can('updateBiometrics', $elemento), 403, 'No cuenta con autorización para actualizar la biometría de este elemento.');
+
+        $categoria = (string) $request->input('categoria', 'foto');
+        abort_unless(in_array($categoria, CapturaTicket::CATEGORIAS, true), 422, 'Este componente biométrico no se captura con el agente de estación.');
+
+        if (! CapturaTicket::configurado()) {
+            return response()->json([
+                'success' => false,
+                'codigo' => 'agente_no_configurado',
+                'message' => 'La captura con el agente de estación no está configurada en el servidor.',
+            ], 503);
+        }
+
+        return response()->json([
+            'success' => true,
+            'ticket' => CapturaTicket::emitir($elemento, $request->user(), $categoria),
+            'elemento_id' => $elemento->id,
+            'categoria' => $categoria,
+        ]);
+    }
+
+    /**
+     * Confirmación operativa de la primera impresión física de la credencial.
+     * Si el resultado es "impresa", la credencial pasa a emitida y se activa la inmutabilidad biométrica.
+     */
+    public function registrarEmision(Request $request, SolicitudElemento $elemento): JsonResponse
+    {
+        return $this->registrarIntentoImpresion($request, $elemento, false);
+    }
+
+    /**
+     * Reimpresión de una credencial ya emitida: exige motivo y conserva el folio original.
+     */
+    public function registrarReimpresion(Request $request, SolicitudElemento $elemento): JsonResponse
+    {
+        return $this->registrarIntentoImpresion($request, $elemento, true);
+    }
+
+    private function registrarIntentoImpresion(Request $request, SolicitudElemento $elemento, bool $reimpresion): JsonResponse
+    {
+        abort_unless($request->user()?->can('print-credentials'), 403, 'No cuenta con autorización para registrar impresiones de credenciales.');
+
+        // Fase 1B.2: toda confirmación pertenece a una preparación con snapshot (una sola vez por preparación).
+        $datos = $request->validate([
+            'preparacion_uuid' => ['required', 'uuid'],
+            'resultado' => ['required', Rule::in([CredencialImpresion::RESULTADO_IMPRESA, CredencialImpresion::RESULTADO_FALLIDA])],
+            'impresora' => ['nullable', 'string', 'max:120'],
+            'estacion_id' => ['nullable', 'integer', 'min:1'],
+            'motivo' => $reimpresion ? ['required', 'string', 'min:10', 'max:500'] : ['nullable', 'string', 'max:500'],
+            'extemporanea' => ['sometimes', 'boolean'],
+            'justificacion_extemporanea' => ['required_if_accepted:extemporanea', 'nullable', 'string', 'min:10', 'max:1000'],
+        ]);
+
+        $resultado = app(CredencialPreparacionService::class)
+            ->confirmar($elemento, $datos['preparacion_uuid'], $reimpresion, $datos, $request->user());
+
+        return response()->json([
+            'success' => true,
+            'resultado' => $datos['resultado'],
+            ...$resultado,
+            'message' => match (true) {
+                $resultado['idempotente'] => 'La confirmación ya estaba registrada para esta preparación.',
+                $resultado['posible_duplicado'] => 'Impresión registrada de forma extemporánea. La credencial ya estaba emitida: se generó una incidencia de posible tarjeta duplicada.',
+                $datos['resultado'] === CredencialImpresion::RESULTADO_FALLIDA => $reimpresion
+                    ? 'Falla de reimpresión registrada.'
+                    : 'Falla de impresión registrada; la credencial sigue pendiente de emisión.',
+                $reimpresion => 'Reimpresión registrada con el folio original.',
+                default => 'Credencial emitida. La información biométrica queda bloqueada.',
+            },
+        ]);
+    }
+
+    /**
+     * Solo las tarjetas autorizadas con "Enviar a impresión" pueden consultarse o procesarse en la cola.
+     */
+    /**
+     * Estado técnico de los cuatro componentes con el mismo criterio de la validación 4/4
+     * (evaluarArchivoTecnico). Solo lectura para la interfaz: no cambia trámite ni expediente.
+     * Devuelve null si el elemento aún no tiene expediente asociado (estado no verificable).
+     *
+     * @return array<string, array{valido: bool, motivo: ?string}>|null
+     */
+    private function estadoComponentesBiometricos(?BiometricoExpediente $expediente): ?array
+    {
+        if ($expediente === null) {
+            return null;
+        }
+
+        $estado = [];
+        foreach ([
+            'foto' => [$expediente->foto, BiometricoCategoria::FOTO],
+            'firma' => [$expediente->firma, BiometricoCategoria::FIRMA],
+            'pulgar_derecho' => [$expediente->pulgarDerecho, BiometricoCategoria::PULGAR_DERECHO],
+            'pulgar_izquierdo' => [$expediente->pulgarIzquierdo, BiometricoCategoria::PULGAR_IZQUIERDO],
+        ] as $slot => [$archivo, $categoria]) {
+            $evaluacion = $expediente->evaluarArchivoTecnico($archivo, $categoria);
+            $estado[$slot] = ['valido' => (bool) $evaluacion['valido'], 'motivo' => $evaluacion['motivo'] ?? null];
+        }
+
+        return $estado;
+    }
+
+    private function rechazarSiNoAutorizada(SolicitudCredencial $solicitud): ?JsonResponse
+    {
+        if ($solicitud->estado_general === 'enviada_impresion') {
+            return null;
+        }
+
+        return response()->json([
+            'success' => false,
+            'message' => 'La tarjeta de trabajo aún no ha sido autorizada para impresión.',
+        ], 409);
     }
 }

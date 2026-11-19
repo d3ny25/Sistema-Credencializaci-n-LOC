@@ -304,6 +304,47 @@ class CredentialPreviewAndBiometricUpdateTest extends TestCase
         $response2->assertJsonValidationErrors(['motivo_cambio']);
     }
 
+    public function test_previsualizacion_vincula_expediente_existente_no_asociado(): void
+    {
+        $this->actingAs($this->authorizedUser);
+
+        $archivo = BiometricoArchivo::create([
+            'ambito' => BiometricoAmbito::ESTATALES,
+            'categoria' => BiometricoCategoria::FOTO,
+            'ruta_relativa' => 'INGESTA/ESTATALES/FOTO/TESTCUIP9999999999_foto.jpg',
+            'nombre_archivo' => 'TESTCUIP9999999999_foto.jpg',
+            'extension' => 'jpg',
+            'tamano_bytes' => 1000,
+            'formato_real' => 'jpg',
+            'mime_type' => 'image/jpeg',
+            'sha256' => str_repeat('a', 64),
+            'cuip_detectado' => 'TESTCUIP9999999999',
+            'cuip_normalizado' => 'TESTCUIP9999999999',
+            'tipo_identificacion' => BiometricoTipoIdentificacion::ESTANDAR,
+            'estado_archivo' => BiometricoEstadoArchivo::VALIDO,
+            'es_vigente' => true,
+            'version_secuencia' => 1,
+        ]);
+        $expediente = BiometricoExpediente::create([
+            'cuip' => 'TESTCUIP9999999999',
+            'ambito' => BiometricoAmbito::ESTATALES,
+            'foto_archivo_id' => $archivo->id,
+            'total_biometricos' => 1,
+            'es_completo' => false,
+            'faltantes' => ['firma', 'pulgar_derecho', 'pulgar_izquierdo'],
+            'estado_revision' => BiometricoEstadoRevision::SIN_EVALUAR,
+        ]);
+        $this->assertNull($this->elemento->biometrico_expediente_id);
+
+        $this->getJson(route('impresion.elemento.previsualizacion', $this->elemento))
+            ->assertOk()
+            ->assertJsonPath('biometricos.foto.existe', true)
+            ->assertJsonPath('biometricos.foto.url', route('impresion.elemento.biometrico.stream', ['elemento' => $this->elemento->id, 'categoria' => 'foto']))
+            ->assertJsonPath('biometricos.firma.existe', false);
+
+        $this->assertSame($expediente->id, (int) $this->elemento->fresh()->biometrico_expediente_id);
+    }
+
     public function test_streaming_biometrico_entrega_archivo_con_cabeceras_anti_cache(): void
     {
         $this->actingAs($this->authorizedUser);

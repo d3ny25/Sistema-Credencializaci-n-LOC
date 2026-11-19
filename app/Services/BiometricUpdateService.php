@@ -215,6 +215,10 @@ class BiometricUpdateService
                 }
             }
 
+            // 7b. Fase 1B.2: las preparaciones de impresión vigentes de esta persona se cancelan; su snapshot
+            //     se conserva y aún admite una confirmación extemporánea si la tarjeta llegó a imprimirse.
+            app(CredencialPreparacionService::class)->cancelarActivasPorCuip($cuip, 'actualizacion_biometrica', $actor);
+
             // 8. Trazabilidad pericial inmutable
             BiometricoAuditoria::registrarAcceso(
                 evento: 'actualizacion_biometrica',

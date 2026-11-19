@@ -1,0 +1,8 @@
+{
+    "puerto": 47391,
+    "origenPermitido": "http://localhost:8000",
+    "secretoEstacion": "REEMPLAZAR-por-el-mismo-valor-de-ESTACION_AGENTE_SECRETO-(min-32-caracteres)",
+    "rutaSdkCrossMatch": "C:\\Ruta\\a\\USB_SDK (carpeta con USB4XX.dll, intl.dll y libglib-2.0-0.dll)",
+    "colaImpresora": "Zebra ZXP Series 7 USB Card Printer",
+    "patronPnpImpresora": "ZXP_SERIES_7"
+}

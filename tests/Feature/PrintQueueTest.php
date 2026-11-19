@@ -57,7 +57,7 @@ class PrintQueueTest extends TestCase
             'consecutivo_tarjeta' => 1,
             'numero_oficio' => 'OF-TEST-PRINT-001',
             'fecha_recepcion' => now(),
-            'estado_general' => 'recibida',
+            'estado_general' => 'enviada_impresion',
             'area_solicitante' => 'DIRECCION DE SEGURIDAD PUBLICA',
             'total_elementos' => 3,
             'total_aptos' => 2,
@@ -126,11 +126,18 @@ class PrintQueueTest extends TestCase
             'consecutivo_tarjeta' => 2,
             'numero_oficio' => 'OF-TEST-PRINT-002',
             'fecha_recepcion' => now(),
-            'estado_general' => 'recibida',
+            'estado_general' => 'enviada_impresion',
             'area_solicitante' => 'DIRECCION DE SEGURIDAD PUBLICA',
             'total_elementos' => 1,
             'total_aptos' => 1,
         ]);
+
+        // Elementos previos en otra solicitud: el ID del elemento validado deja de ser 1,
+        // así se comprueba que el folio no se deriva del ID.
+        $otra = SolicitudCredencial::create(['numero_tarjeta' => 'TJ-TEST-PRINT-099', 'consecutivo_tarjeta' => 99, 'numero_oficio' => 'OF-TEST-PRINT-099']);
+        foreach ([1, 2] as $fila) {
+            SolicitudElemento::create(['solicitud_id' => $otra->id, 'numero_fila' => $fila]);
+        }
 
         $elemento = SolicitudElemento::create([
             'solicitud_id' => $solicitud->id,
@@ -197,7 +204,67 @@ class PrintQueueTest extends TestCase
         $elemento->refresh();
         $this->assertEquals('listo_impresion', $elemento->estado_tramite);
         $this->assertNotNull($elemento->credencialEmitida);
-        $this->assertNotEmpty($elemento->credencialEmitida->folio);
+
+        // Folio institucional consecutivo, independiente del ID del elemento.
+        $this->assertSame(3, $elemento->id);
+        $this->assertSame('OM2527E00001', $elemento->credencialEmitida->folio);
+        $this->assertSame('OM2527E00001', $detalles[0]['folio']);
+
+        // La asignación queda trazada aparte de la emisión física.
+        $this->assertSame($this->adminUser->id, (int) $elemento->credencialEmitida->folio_asignado_por_user_id);
+        $this->assertNull($elemento->credencialEmitida->emitida_por_user_id);
+
+        // Validar de nuevo no genera otro folio ni consume la secuencia.
+        $this->postJson(route('impresion.tarjeta.validar-biometria', $solicitud))->assertOk();
+        $this->assertSame('OM2527E00001', $elemento->fresh()->credencialEmitida->folio);
+
+        // La cola expone el estado por componente con el mismo criterio de la validación 4/4.
+        $porComponente = $this->getJson(route('impresion.tarjeta.elementos', $solicitud))->json('elementos.0.biometricos');
+        $this->assertSame(['foto', 'firma', 'pulgar_derecho', 'pulgar_izquierdo'], array_keys($porComponente));
+        $this->assertTrue(collect($porComponente)->every(fn (array $c) => $c['valido'] === true));
+
+        $expediente->firma->update(['es_vigente' => false]);
+        $firma = $this->getJson(route('impresion.tarjeta.elementos', $solicitud))->json('elementos.0.biometricos.firma');
+        $this->assertFalse($firma['valido']);
+        $this->assertSame('firma_no_vigente', $firma['motivo']);
+        $this->assertSame(1, (int) \Illuminate\Support\Facades\DB::table('solicitud_secuencias')->where('clave', 'folio_credencial')->value('ultimo_consecutivo'));
+    }
+
+    public function test_validar_biometria_sin_secuencia_de_folio_responde_error_controlado_sin_credencial(): void
+    {
+        $this->actingAs($this->adminUser);
+        \Illuminate\Support\Facades\DB::table('solicitud_secuencias')->where('clave', 'folio_credencial')->delete();
+
+        $solicitud = SolicitudCredencial::create([
+            'numero_tarjeta' => 'TJ-TEST-PRINT-003', 'consecutivo_tarjeta' => 3, 'numero_oficio' => 'OF-TEST-PRINT-003',
+            'estado_general' => 'enviada_impresion', 'total_elementos' => 1, 'total_aptos' => 1,
+        ]);
+        SolicitudElemento::create([
+            'solicitud_id' => $solicitud->id, 'numero_fila' => 1, 'cuip' => 'TESTCUIP0000000011', 'resultado_prefiltro' => 'Apto',
+            'ambito_biometrico' => BiometricoAmbito::ESTATALES,
+            'estado_clasificacion_ambito' => \App\Enums\BiometricoClasificacionEstado::VALIDADA,
+            'estado_tramite' => 'pendiente_biometrico',
+        ]);
+        $expediente = BiometricoExpediente::create([
+            'cuip' => 'TESTCUIP0000000011', 'ambito' => BiometricoAmbito::ESTATALES, 'total_biometricos' => 4,
+            'es_completo' => true, 'estado_revision' => BiometricoEstadoRevision::SIN_EVALUAR, 'faltantes' => [],
+        ]);
+        foreach (BiometricoCategoria::requeridas() as $tipo) {
+            $archivo = BiometricoArchivo::create([
+                'cuip_detectado' => 'TESTCUIP0000000011', 'cuip_normalizado' => 'TESTCUIP0000000011',
+                'tipo_identificacion' => BiometricoTipoIdentificacion::ESTANDAR, 'ambito' => BiometricoAmbito::ESTATALES,
+                'categoria' => $tipo, 'nombre_archivo' => "{$tipo->value}.jpg", 'ruta_relativa' => "TESTCUIP0000000011/{$tipo->value}.jpg",
+                'sha256' => hash('sha256', "test11-{$tipo->value}"), 'tamano_bytes' => 1024, 'formato_real' => 'jpg',
+                'extension' => 'jpg', 'mime_type' => 'image/jpeg', 'estado_archivo' => BiometricoEstadoArchivo::VALIDO, 'es_vigente' => true,
+            ]);
+            $expediente->update([$tipo->columnaExpediente() => $archivo->id]);
+        }
+
+        $this->postJson(route('impresion.tarjeta.validar-biometria', $solicitud))
+            ->assertStatus(409)
+            ->assertJson(['success' => false]);
+
+        $this->assertDatabaseCount('credenciales_emitidas', 0);
     }
 
     public function test_endpoint_validar_biometria_detecta_archivos_faltantes_y_marca_pendiente(): void
@@ -209,7 +276,7 @@ class PrintQueueTest extends TestCase
             'consecutivo_tarjeta' => 3,
             'numero_oficio' => 'OF-TEST-PRINT-003',
             'fecha_recepcion' => now(),
-            'estado_general' => 'recibida',
+            'estado_general' => 'enviada_impresion',
             'area_solicitante' => 'DIRECCION DE SEGURIDAD PUBLICA',
             'total_elementos' => 1,
             'total_aptos' => 1,

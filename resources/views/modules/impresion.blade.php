@@ -7,6 +7,7 @@
 @php
     try {
         $tarjetasDisponibles = \App\Models\SolicitudCredencial::query()
+            ->where('estado_general', 'enviada_impresion')
             ->orderByDesc('id')
             ->get(['id', 'numero_tarjeta', 'numero_oficio', 'area_solicitante', 'total_aptos']);
     } catch (\Throwable) {
@@ -14,103 +15,84 @@
     }
 @endphp
 
+@section('page-actions')
+    @can('manage-credential-templates')
+        <span class="hidden text-xs text-tx-soft xl:inline">Diseño de credencial:</span>
+        <a href="{{ route('impresion.plantilla', ['template_version' => 1]) }}" class="btn btn-secondary btn-sm" title="Editor de plantilla vertical · versión base">Editar v1 Base</a>
+        <a href="{{ route('impresion.plantilla', ['template_version' => 2]) }}" class="btn btn-primary btn-sm" title="Editor de plantilla vertical · versión oficial"><x-icon name="pen" class="h-3.5 w-3.5"/>Editar v2 Oficial Real</a>
+    @endcan
+@endsection
+
 @section('content')
     <x-module-tabs :active="$section" :items="[
         ['key' => 'cola', 'label' => 'Cola de impresión', 'route' => 'impresion'],
         ['key' => 'biometricos', 'label' => 'Pendientes biométricos', 'route' => 'impresion.biometricos'],
     ]"/>
 
-    <div class="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-inst-100 bg-inst-50/70 p-4">
-        <div>
-            <p class="text-sm font-semibold text-inst-900">Diseño de credencial</p>
-            <p class="mt-1 text-xs text-tx-soft">Editor de plantilla vertical para anverso y reverso; la edición se guarda como borrador con permisos.</p>
-        </div>
-        <div class="inline-flex gap-2">
-            <a href="{{ route('impresion.plantilla', ['template_version' => 1]) }}" class="rounded-md border border-inst-300 bg-white px-3 py-2 text-xs font-semibold text-inst-900 hover:bg-inst-50 transition">Editar v1 Base</a>
-            <a href="{{ route('impresion.plantilla', ['template_version' => 2]) }}" class="rounded-md bg-inst-700 px-3 py-2 text-xs font-semibold text-white hover:bg-inst-900 transition">Editar v2 Oficial Real</a>
-        </div>
-    </div>
-
     @if ($section === 'biometricos')
-        <div class="mb-5 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-            @foreach (['Pendientes biométricos', 'Fotografía pendiente', 'Firma pendiente', 'Huellas pendientes'] as $label)
-                <div class="rounded-lg border border-slate-200 bg-white p-4 shadow-card">
-                    <p class="text-xs text-tx-soft">{{ $label }}</p>
-                    <p class="mt-2 text-2xl font-semibold text-inst-900">—</p>
-                    <p class="mt-1 text-xs text-tx-soft">Seguimiento pericial activo</p>
-                </div>
-            @endforeach
-        </div>
-        <x-card title="Pendientes biométricos" description="Los elementos con datos biométricos faltantes o ámbito no resuelto requieren solventación antes de su emisión.">
-            <div class="p-8 text-center text-sm text-tx-soft">
-                <p>Consulte la pestaña principal de la <strong>Cola de impresión</strong> para ejecutar la validación biométrica en tiempo real.</p>
-                <div class="mt-4">
-                    <a href="{{ route('impresion') }}" class="inline-flex items-center gap-2 rounded-md bg-inst-700 px-4 py-2 text-sm font-semibold text-white hover:bg-inst-800 transition">
-                        <span>Ir a Cola de impresión</span>
-                    </a>
-                </div>
+        <x-card title="Pendientes biométricos" icon="fingerprint" description="Elementos con fotografía, firma o huellas faltantes, o con ámbito no resuelto.">
+            <div class="flex flex-col items-center px-6 py-10 text-center">
+                <span class="flex h-12 w-12 items-center justify-center rounded-full bg-inst-50 text-inst-700"><x-icon name="fingerprint" class="h-6 w-6"/></span>
+                <h2 class="mt-3 text-sm font-semibold text-inst-900">La validación biométrica se realiza por tarjeta de trabajo</h2>
+                <p class="mt-1 max-w-lg text-sm text-tx-soft">Seleccione una tarjeta en la cola de impresión y ejecute <strong>Validar datos biométricos</strong>: el semáforo de cada elemento indica qué archivos faltan. Este resumen transversal aún no tiene una consulta propia, por lo que no se muestran cifras.</p>
+                <a href="{{ route('impresion') }}" class="btn btn-primary mt-5"><x-icon name="printer" class="h-4 w-4"/>Ir a la cola de impresión</a>
             </div>
         </x-card>
     @else
         {{-- Componente Reactivo Alpine.js de la Cola de Impresión --}}
         <div x-data="printQueue()" x-cloak class="space-y-5">
             <!-- 1. Tarjetas de Métricas / KPIs Reactivas -->
-            <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-                <div class="rounded-lg border border-slate-200 bg-white p-4 shadow-card">
-                    <p class="text-xs font-semibold text-tx-soft uppercase tracking-wide">Trabajos en cola</p>
-                    <p class="mt-2 text-2xl font-bold text-inst-900" x-text="metricas.trabajos_en_cola">0</p>
-                    <p class="mt-1 text-[11px] text-tx-soft" x-text="selectedTarjeta ? 'Elementos aptos en tarjeta' : 'Sin tarjeta seleccionada'"></p>
-                </div>
-                <div class="rounded-lg border border-slate-200 bg-white p-4 shadow-card">
-                    <p class="text-xs font-semibold text-tx-soft uppercase tracking-wide">Listos para imprimir</p>
-                    <p class="mt-2 text-2xl font-bold text-emerald-700" x-text="metricas.listos_para_imprimir">0</p>
-                    <p class="mt-1 text-[11px] text-tx-soft" x-text="selectedTarjeta ? 'Con biometría 4/4 y folio' : 'Sin tarjeta seleccionada'"></p>
-                </div>
-                <div class="rounded-lg border border-slate-200 bg-white p-4 shadow-card">
-                    <p class="text-xs font-semibold text-tx-soft uppercase tracking-wide">Biometría pendiente</p>
-                    <p class="mt-2 text-2xl font-bold text-amber-700" x-text="metricas.biometria_pendiente">0</p>
-                    <p class="mt-1 text-[11px] text-tx-soft" x-text="selectedTarjeta ? 'Faltan archivos o ámbito' : 'Sin tarjeta seleccionada'"></p>
-                </div>
-                <div class="rounded-lg border border-slate-200 bg-white p-4 shadow-card">
-                    <p class="text-xs font-semibold text-tx-soft uppercase tracking-wide">Impresos / Emitidos</p>
-                    <p class="mt-2 text-2xl font-bold text-slate-700" x-text="metricas.impresos">0</p>
-                    <p class="mt-1 text-[11px] text-tx-soft" x-text="selectedTarjeta ? 'Credenciales producidas' : 'Sin tarjeta seleccionada'"></p>
-                </div>
+            <div class="grid grid-cols-2 gap-4 xl:grid-cols-4">
+                <x-kpi label="Trabajos en cola" icon="inbox" tone="info">
+                    <span x-text="metricas.trabajos_en_cola">0</span>
+                    <x-slot:detail><span x-text="selectedTarjeta ? 'Elementos aptos en tarjeta' : 'Sin tarjeta seleccionada'"></span></x-slot:detail>
+                </x-kpi>
+                <x-kpi label="Listos para imprimir" icon="printer" tone="success">
+                    <span x-text="metricas.listos_para_imprimir">0</span>
+                    <x-slot:detail><span x-text="selectedTarjeta ? 'Con biometría 4/4 y folio' : 'Sin tarjeta seleccionada'"></span></x-slot:detail>
+                </x-kpi>
+                <x-kpi label="Biometría pendiente" icon="fingerprint" tone="warning">
+                    <span x-text="metricas.biometria_pendiente">0</span>
+                    <x-slot:detail><span x-text="selectedTarjeta ? 'Faltan archivos o ámbito' : 'Sin tarjeta seleccionada'"></span></x-slot:detail>
+                </x-kpi>
+                <x-kpi label="Impresos / emitidos" icon="creditcard" tone="neutral">
+                    <span x-text="metricas.impresos">0</span>
+                    <x-slot:detail><span x-text="selectedTarjeta ? 'Credenciales producidas' : 'Sin tarjeta seleccionada'"></span></x-slot:detail>
+                </x-kpi>
             </div>
 
             <!-- 2. Banners de Alerta Reactivos -->
-            <div x-show="mensajeExito" x-cloak class="rounded-lg border border-emerald-200 bg-emerald-50/90 p-4 text-sm text-emerald-900 flex items-start justify-between gap-3 shadow-2xs">
+            <div x-show="mensajeExito" x-cloak role="status" class="alert alert-success justify-between">
                 <div class="flex items-center gap-2">
                     <svg class="h-5 w-5 text-emerald-600 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
                     </svg>
                     <span x-text="mensajeExito"></span>
                 </div>
-                <button type="button" @click="mensajeExito = ''" class="text-emerald-700 hover:text-emerald-900 text-lg leading-none font-bold">&times;</button>
+                <button type="button" @click="mensajeExito = ''" class="rounded p-0.5 text-emerald-800 hover:bg-emerald-100" aria-label="Cerrar aviso"><x-icon name="x" class="h-4 w-4"/></button>
             </div>
 
-            <div x-show="mensajeError" x-cloak class="rounded-lg border border-rose-200 bg-rose-50/90 p-4 text-sm text-rose-900 flex items-start justify-between gap-3 shadow-2xs">
+            <div x-show="mensajeError" x-cloak role="alert" class="alert alert-danger justify-between">
                 <div class="flex items-center gap-2">
                     <svg class="h-5 w-5 text-rose-600 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                     </svg>
                     <span x-text="mensajeError"></span>
                 </div>
-                <button type="button" @click="mensajeError = ''" class="text-rose-700 hover:text-rose-900 text-lg leading-none font-bold">&times;</button>
+                <button type="button" @click="mensajeError = ''" class="rounded p-0.5 text-red-800 hover:bg-red-100" aria-label="Cerrar aviso"><x-icon name="x" class="h-4 w-4"/></button>
             </div>
 
             <!-- 3. Contenedor de la Cola de Impresión -->
             <x-card title="Cola de impresión" description="Seleccione una tarjeta de trabajo para consultar sus elementos aptos y validar la biometría oficial.">
                 <!-- Filtros y Selectores -->
-                <div class="mb-5 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                <div class="panel-muted mb-4 grid grid-cols-1 gap-3 p-4 sm:grid-cols-2 xl:grid-cols-4" role="search" aria-label="Filtrar cola de impresión">
                     <!-- Selector de Tarjeta de Trabajo -->
-                    <label class="text-xs font-semibold text-tx-soft">
+                    <label class="field-label">
                         Tarjeta de trabajo
                         <select data-tarjeta-trabajo-impresion
                                 x-model="selectedTarjeta"
                                 @change="cargarElementos()"
-                                :disabled="isLoading"
-                                class="mt-1 w-full rounded-md border-0 bg-white px-3 py-2 text-sm text-slate-800 ring-1 ring-inset ring-slate-300 focus:ring-2 focus:ring-inst-600 disabled:bg-slate-100 disabled:cursor-not-allowed">
+                                :disabled="isLoading">
                             <option value="">-- Selecciona una tarjeta de trabajo --</option>
                             @foreach ($tarjetasDisponibles as $tarjeta)
                                 <option value="{{ $tarjeta->id }}">
@@ -121,21 +103,19 @@
                     </label>
 
                     <!-- Búsqueda reactiva -->
-                    <label class="text-xs font-semibold text-tx-soft">
+                    <label class="field-label">
                         Buscar en tarjeta
                         <input type="search"
                                x-model="search"
                                :disabled="!selectedTarjeta || isLoading"
-                               placeholder="CUIP, nombre o folio"
-                               class="mt-1 w-full rounded-md border-0 bg-white px-3 py-2 text-sm ring-1 ring-inset ring-slate-300 focus:ring-2 focus:ring-inst-600 disabled:bg-slate-100 disabled:cursor-not-allowed">
+                               placeholder="CUIP, nombre o folio">
                     </label>
 
                     <!-- Filtro de Estado Biométrico -->
-                    <label class="text-xs font-semibold text-tx-soft">
+                    <label class="field-label">
                         Estado biométrico
                         <select x-model="filtroEstado"
-                                :disabled="!selectedTarjeta || isLoading"
-                                class="mt-1 w-full rounded-md border-0 bg-white px-3 py-2 text-sm ring-1 ring-inset ring-slate-300 focus:ring-2 focus:ring-inst-600 disabled:bg-slate-100 disabled:cursor-not-allowed">
+                                :disabled="!selectedTarjeta || isLoading">
                             <option value="todos">Todos los estados</option>
                             <option value="listo">Listos para imprimir (4/4)</option>
                             <option value="pendiente">Pendientes de biometría</option>
@@ -143,11 +123,10 @@
                     </label>
 
                     <!-- Filtro de Ámbito Institucional -->
-                    <label class="text-xs font-semibold text-tx-soft">
+                    <label class="field-label">
                         Ámbito institucional
                         <select x-model="filtroAmbito"
-                                :disabled="!selectedTarjeta || isLoading"
-                                class="mt-1 w-full rounded-md border-0 bg-white px-3 py-2 text-sm ring-1 ring-inset ring-slate-300 focus:ring-2 focus:ring-inst-600 disabled:bg-slate-100 disabled:cursor-not-allowed">
+                                :disabled="!selectedTarjeta || isLoading">
                             <option value="todos">Todos los ámbitos</option>
                             <option value="ESTATALES">Estatales</option>
                             <option value="PREVENCION">Prevención</option>
@@ -161,7 +140,8 @@
                     <div class="text-xs text-tx-soft">
                         <template x-if="selectedTarjeta && elementos.length > 0">
                             <span>
-                                Mostrando <strong class="text-slate-800" x-text="elementosFiltrados.length"></strong> de <strong class="text-slate-800" x-text="elementos.length"></strong> elementos aptos
+                                Mostrando <strong class="text-tx" x-text="elementosFiltrados.length"></strong> de <strong class="text-tx" x-text="elementos.length"></strong> elementos aptos
+                                <template x-if="numeroTarjeta"><span> · Tarjeta <span class="code-chip" x-text="numeroTarjeta"></span></span></template>
                             </span>
                         </template>
                     </div>
@@ -171,7 +151,7 @@
                         <button type="button"
                                 @click="cargarElementos()"
                                 :disabled="isLoading || !selectedTarjeta"
-                                class="inline-flex items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 shadow-2xs hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40 transition">
+                                class="btn btn-secondary">
                             <svg class="h-4 w-4 text-slate-500" :class="isLoading ? 'animate-spin' : ''" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                             </svg>
@@ -182,7 +162,7 @@
                         <button type="button"
                                 @click="validarBiometria()"
                                 x-bind:disabled="isLoading || !selectedTarjeta"
-                                class="inline-flex items-center gap-2 rounded-md bg-inst-700 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-inst-800 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-500 transition">
+                                class="btn btn-primary">
                             <svg x-show="isLoading" class="h-4 w-4 animate-spin text-white" fill="none" viewBox="0 0 24 24">
                                 <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
                                 <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
@@ -196,7 +176,7 @@
                 </div>
 
                 <!-- 4. Contenedor de la Tabla de Elementos -->
-                <div class="overflow-x-auto rounded-lg border border-slate-200 bg-white">
+                <div class="table-wrap">
                     <!-- Estado Vacío: Sin selección de tarjeta -->
                     <template x-if="!selectedTarjeta">
                         <div class="p-12 text-center">
@@ -230,124 +210,100 @@
                         </div>
                     </template>
 
+                    @php
+                        // Los cuatro componentes que evalúa la validación 4/4 (BiometricoExpediente::evaluarArchivoTecnico).
+                        $componentesBio = [
+                            ['key' => 'foto', 'label' => 'Fotografía', 'icon' => 'camera', 'lado' => null],
+                            ['key' => 'firma', 'label' => 'Firma', 'icon' => 'pen', 'lado' => null],
+                            ['key' => 'pulgar_derecho', 'label' => 'Pulgar derecho', 'icon' => 'fingerprint', 'lado' => 'D'],
+                            ['key' => 'pulgar_izquierdo', 'label' => 'Pulgar izquierdo', 'icon' => 'fingerprint', 'lado' => 'I'],
+                        ];
+                    @endphp
                     <!-- Tabla Reactiva con x-for -->
-                    <table x-show="selectedTarjeta && elementos.length > 0" class="min-w-full divide-y divide-slate-200 text-left text-xs">
-                        <thead class="bg-slate-50/95 font-bold uppercase tracking-wider text-slate-600 text-[10px]">
+                    <table x-show="selectedTarjeta && elementos.length > 0" class="table-data table-compact">
+                        <thead>
                             <tr>
-                                <th scope="col" class="w-[50px] px-3 py-3 text-center"># / Fila</th>
-                                <th scope="col" class="w-[160px] px-3 py-3">CUIP</th>
-                                <th scope="col" class="px-3 py-3">Nombre</th>
-                                <th scope="col" class="w-[140px] px-3 py-3">Tarjeta</th>
-                                <th scope="col" class="w-[110px] px-3 py-3">Ámbito</th>
-                                <th scope="col" class="w-[140px] px-3 py-3">Folio</th>
-                                <th scope="col" class="w-[200px] px-3 py-3">Semáforo Biometría</th>
-                                <th scope="col" class="w-[130px] px-3 py-3 text-center">Estado</th>
-                                <th scope="col" class="w-[110px] px-3 py-3 text-center">Acciones</th>
+                                <th scope="col">CUIP / fila</th>
+                                <th scope="col">Nombre</th>
+                                <th scope="col">Ámbito</th>
+                                <th scope="col">Folio</th>
+                                <th scope="col" class="whitespace-normal">Semáforo Biometría</th>
+                                <th scope="col" class="text-center">Estado</th>
+                                <th scope="col" class="text-center">Acciones</th>
                             </tr>
                         </thead>
                         <tbody class="divide-y divide-slate-100 bg-white">
                             <template x-for="(elem, index) in elementosFiltrados" :key="elem.id">
                                 <tr class="hover:bg-inst-50/20 transition-colors">
-                                    <!-- 1. # / Fila -->
-                                    <td class="px-3 py-2 text-center whitespace-nowrap">
-                                        <span class="font-mono font-bold text-slate-800" x-text="'#' + (index + 1)"></span>
-                                        <div class="font-mono text-[9px] text-slate-400" x-text="elem.numero_fila ? 'F. ' + elem.numero_fila : ''"></div>
-                                    </td>
-
                                     <!-- 2. CUIP -->
-                                    <td class="px-3 py-2 whitespace-nowrap">
-                                        <div class="inline-flex items-center gap-1 font-mono text-[11px] font-bold text-inst-900">
+                                    <td class="whitespace-nowrap">
+                                        <div class="inline-flex items-center gap-1 font-mono text-xs font-semibold text-inst-900">
                                             <span x-text="elem.cuip"></span>
                                             <button type="button"
                                                     @click="navigator.clipboard.writeText(elem.cuip)"
                                                     class="text-slate-400 hover:text-inst-700 transition"
-                                                    title="Copiar CUIP">
+                                                    title="Copiar CUIP" :aria-label="'Copiar CUIP ' + elem.cuip">
                                                 <svg class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                                     <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
                                                     <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
                                                 </svg>
                                             </button>
                                         </div>
+                                        <div class="font-mono text-2xs text-tx-soft" x-text="'#' + (index + 1) + (elem.numero_fila ? ' · Fila Excel ' + elem.numero_fila : '')"></div>
                                     </td>
 
                                     <!-- 3. Nombre -->
-                                    <td class="px-3 py-2">
-                                        <div class="font-bold text-slate-900 leading-tight truncate max-w-xs" :title="elem.nombre" x-text="elem.nombre"></div>
-                                        <div class="text-[10px] text-slate-500 mt-0.5 truncate max-w-xs" x-text="[elem.categoria, elem.municipio].filter(Boolean).join(' · ')"></div>
-                                    </td>
-
-                                    <!-- 4. Tarjeta -->
-                                    <td class="px-3 py-2 whitespace-nowrap">
-                                        <span class="font-mono text-xs text-slate-700" x-text="elem.numero_tarjeta || numeroTarjeta || '—'"></span>
+                                    <td>
+                                        <div class="font-bold text-slate-900 leading-tight truncate max-w-[12rem]" :title="elem.nombre" x-text="elem.nombre"></div>
+                                        <div class="text-2xs text-slate-500 mt-0.5 truncate max-w-[12rem]" x-text="[elem.categoria, elem.municipio].filter(Boolean).join(' · ')"></div>
                                     </td>
 
                                     <!-- 5. Ámbito -->
-                                    <td class="px-3 py-2 whitespace-nowrap">
+                                    <td class="whitespace-nowrap">
                                         <template x-if="elem.ambito_biometrico === 'ESTATALES'">
-                                            <span class="inline-flex items-center rounded bg-sky-50 px-2 py-0.5 text-[10px] font-semibold text-sky-800 border border-sky-200">
+                                            <span class="inline-flex items-center rounded bg-sky-50 px-2 py-0.5 text-2xs font-semibold text-sky-800 border border-sky-200">
                                                 Estatales
                                             </span>
                                         </template>
                                         <template x-if="elem.ambito_biometrico === 'PREVENCION'">
-                                            <span class="inline-flex items-center rounded bg-purple-50 px-2 py-0.5 text-[10px] font-semibold text-purple-800 border border-purple-200">
+                                            <span class="inline-flex items-center rounded bg-purple-50 px-2 py-0.5 text-2xs font-semibold text-purple-800 border border-purple-200">
                                                 Prevención
                                             </span>
                                         </template>
                                         <template x-if="elem.ambito_biometrico === 'NO_RESUELTO' || !elem.ambito_biometrico">
-                                            <span class="inline-flex items-center rounded bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-600 border border-slate-200">
+                                            <span class="inline-flex items-center rounded bg-slate-100 px-2 py-0.5 text-2xs font-semibold text-slate-600 border border-slate-200">
                                                 No Resuelto
                                             </span>
                                         </template>
                                     </td>
 
                                     <!-- 6. Folio Institucional -->
-                                    <td class="px-3 py-2 whitespace-nowrap">
-                                        <span class="font-mono text-xs font-bold text-inst-900 bg-inst-50/90 px-2 py-0.5 rounded border border-inst-200"
-                                              x-text="elem.folio || '—'"></span>
+                                    <td class="whitespace-nowrap">
+                                        <span class="code-chip" x-text="elem.folio || '—'"></span>
                                     </td>
 
-                                    <!-- 6. Semáforo Biométrico -->
-                                    <td class="px-3 py-2">
-                                        <!-- Completa 4/4 -->
-                                        <template x-if="elem.biometria_valida === true">
-                                            <div class="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-0.5 text-[11px] font-semibold text-emerald-800 border border-emerald-200">
-                                                <svg class="h-3.5 w-3.5 text-emerald-600" fill="currentColor" viewBox="0 0 20 20">
-                                                    <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/>
-                                                </svg>
-                                                <span>Completa 4/4</span>
-                                            </div>
-                                        </template>
-
-                                        <!-- Incompleta o Faltantes -->
-                                        <template x-if="elem.biometria_valida === false">
-                                            <div class="space-y-1">
-                                                <div class="inline-flex items-center gap-1 rounded-full bg-rose-50 px-2 py-0.5 text-[10.5px] font-semibold text-rose-800 border border-rose-200">
-                                                    <svg class="h-3 w-3 text-rose-600 shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                                                        <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"/>
-                                                    </svg>
-                                                    <span>Incompleta</span>
-                                                </div>
-                                                <template x-if="elem.faltantes && elem.faltantes.length > 0">
-                                                    <div class="space-y-0.5">
-                                                        <template x-for="falta in elem.faltantes" :key="falta">
-                                                            <div class="text-[9.5px] text-rose-700 truncate max-w-[190px]" :title="falta" x-text="'• ' + falta"></div>
-                                                        </template>
-                                                    </div>
-                                                </template>
-                                            </div>
-                                        </template>
-
-                                        <!-- Sin validar aún -->
-                                        <template x-if="elem.biometria_valida === undefined || elem.biometria_valida === null">
-                                            <span class="inline-flex items-center rounded-full bg-slate-100 px-2.5 py-0.5 text-[10px] font-medium text-slate-600 border border-slate-200">
-                                                Sin validar
-                                            </span>
-                                        </template>
+                                    <!-- 6. Semáforo biométrico por componente (criterio de la validación 4/4) -->
+                                    <td>
+                                        <div class="flex items-center gap-1" role="list" :aria-label="'Biometría de ' + (elem.nombre || elem.cuip)">
+                                            @foreach ($componentesBio as $c)
+                                                <span role="listitem"
+                                                      class="relative flex h-7 w-7 items-center justify-center rounded-md border"
+                                                      :class="claseComponente(elem, '{{ $c['key'] }}')"
+                                                      :title="tituloComponente(elem, '{{ $c['key'] }}', '{{ $c['label'] }}')">
+                                                    <x-icon :name="$c['icon']" class="h-3.5 w-3.5"/>
+                                                    @if ($c['lado'])
+                                                        <span class="absolute bottom-0 right-0.5 text-2xs font-bold leading-none" aria-hidden="true">{{ $c['lado'] }}</span>
+                                                    @endif
+                                                    <span class="sr-only" x-text="tituloComponente(elem, '{{ $c['key'] }}', '{{ $c['label'] }}')"></span>
+                                                </span>
+                                            @endforeach
+                                        </div>
+                                        <p class="mt-1 whitespace-nowrap text-2xs font-medium" :class="claseResumenBiometria(elem)" x-text="resumenBiometria(elem)"></p>
                                     </td>
 
                                     <!-- 8. Estado Trámite -->
-                                    <td class="px-3 py-2 text-center whitespace-nowrap">
-                                        <span class="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10.5px] font-semibold"
+                                    <td class="text-center whitespace-nowrap">
+                                        <span class="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-2xs font-semibold"
                                               :class="{
                                                   'bg-emerald-50 text-emerald-800 border border-emerald-200': elem.estado_tramite === 'listo_impresion',
                                                   'bg-amber-50 text-amber-800 border border-amber-200': elem.estado_tramite === 'pendiente_biometrico',
@@ -359,22 +315,28 @@
                                                       'bg-amber-500': elem.estado_tramite === 'pendiente_biometrico',
                                                       'bg-slate-400': elem.estado_tramite !== 'listo_impresion' && elem.estado_tramite !== 'pendiente_biometrico'
                                                   }"></span>
-                                            <span x-text="elem.estado_tramite"></span>
+                                            <span x-text="etiquetaTramite(elem.estado_tramite)"></span>
                                         </span>
                                     </td>
 
-                                    <!-- 8. Acciones -->
-                                    <td class="px-3 py-2 text-center whitespace-nowrap">
-                                        <button type="button"
-                                                @click="abrirModalPrevisualizacion(elem.id)"
-                                                class="inline-flex items-center gap-1 rounded bg-inst-700 px-2.5 py-1 text-xs font-semibold text-white shadow-2xs hover:bg-inst-800 transition"
-                                                title="Previsualizar credencial y gestionar datos biométricos">
-                                            <svg class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                                            </svg>
-                                            <span>Vista previa</span>
-                                        </button>
+                                    <!-- 8. Acciones: vista previa y edición son acciones distintas -->
+                                    <td class="whitespace-nowrap text-center">
+                                        <div class="inline-flex items-center gap-1">
+                                            <button type="button"
+                                                    @click="abrirModalPrevisualizacion(elem.id, null, 'vista')"
+                                                    class="btn btn-secondary btn-sm btn-icon"
+                                                    title="Vista previa de la credencial"
+                                                    :aria-label="'Vista previa de la credencial de ' + (elem.nombre || elem.cuip)">
+                                                <x-icon name="eye" class="h-4 w-4"/>
+                                            </button>
+                                            <button type="button"
+                                                    @click="abrirModalPrevisualizacion(elem.id, null, 'edicion')"
+                                                    class="btn btn-primary btn-sm btn-icon"
+                                                    title="Datos y biometría"
+                                                    :aria-label="'Datos y biometría de ' + (elem.nombre || elem.cuip)">
+                                                <x-icon name="fingerprint" class="h-4 w-4"/>
+                                            </button>
+                                        </div>
                                     </td>
                                 </tr>
                             </template>
@@ -382,7 +344,7 @@
                             <!-- Estado Vacío: Sin coincidencias tras filtros -->
                             <template x-if="elementos.length > 0 && elementosFiltrados.length === 0">
                                 <tr>
-                                    <td colspan="9" class="px-6 py-8 text-center text-xs text-tx-soft">
+                                    <td colspan="7" class="px-6 py-8 text-center text-xs text-tx-soft">
                                         No se encontraron elementos aptos que coincidan con los filtros aplicados.
                                     </td>
                                 </tr>
@@ -395,8 +357,9 @@
             <!-- Modal Interactivo de Dos Paneles: Vista Previa y Gestión Biométrica -->
             <div x-show="modalPrevisualizacion"
                  x-cloak
+                 role="dialog" aria-modal="true" aria-labelledby="modal-previsualizacion-titulo"
                  @keydown.escape.window="cerrarModalPrevisualizacion()"
-                 class="fixed inset-0 z-50 flex justify-center p-2 sm:p-3 bg-slate-900/60 backdrop-blur-sm overflow-y-auto">
+                 class="fixed inset-0 z-50 !mt-0 flex justify-center overflow-y-auto bg-inst-950/60 p-2 backdrop-blur-sm sm:p-3">
                 <div @click.outside="cerrarModalPrevisualizacion()"
                      class="relative w-full max-w-6xl my-auto h-[94vh] max-h-[820px] min-h-[500px] flex flex-col rounded-xl bg-white shadow-2xl border border-slate-200 overflow-hidden text-left">
                     
@@ -409,7 +372,7 @@
                          x-transition:leave="transition ease-in duration-200 transform"
                          x-transition:leave-start="opacity-100 translate-y-0 scale-100"
                          x-transition:leave-end="opacity-0 -translate-y-2 scale-95"
-                         class="absolute top-4 right-4 z-50 max-w-sm rounded-lg bg-white p-3 shadow-xl border"
+                         role="status" aria-live="polite" class="absolute top-4 right-4 z-50 max-w-sm rounded-lg bg-white p-3 shadow-pop border"
                          :class="toastTipo === 'exito' ? 'border-emerald-300 ring-1 ring-emerald-500/20' : 'border-rose-300 ring-1 ring-rose-500/20'">
                         <div class="flex items-start gap-2.5">
                             <div class="flex h-6 w-6 shrink-0 items-center justify-center rounded-full"
@@ -431,7 +394,7 @@
                                     x-text="toastTipo === 'exito' ? 'Operación Exitosa' : 'Incidencia Detectada'"></h4>
                                 <p class="text-[11px] text-slate-600 mt-0.5 leading-snug" x-text="toastMensaje"></p>
                             </div>
-                            <button type="button" @click="toastMensaje = ''" class="text-slate-400 hover:text-slate-600 text-sm font-bold ml-1">&times;</button>
+                            <button type="button" @click="toastMensaje = ''" class="ml-1 rounded p-0.5 text-slate-500 hover:bg-slate-100 hover:text-slate-700" aria-label="Cerrar notificación"><x-icon name="x" class="h-3.5 w-3.5"/></button>
                         </div>
                     </div>
 
@@ -445,8 +408,9 @@
                                 </svg>
                             </div>
                             <div>
-                                <h3 class="text-sm sm:text-base font-bold text-slate-900">
-                                    Vista Previa de Credencial y Control Biométrico
+                                <h3 id="modal-previsualizacion-titulo" class="text-sm font-semibold text-inst-900 sm:text-base"
+                                    x-text="modoModal === 'vista' ? 'Vista previa de la credencial' : 'Datos y biometría de la credencial'">
+                                    Vista previa de la credencial
                                 </h3>
                                 <template x-if="previewData">
                                     <p class="text-xs text-tx-soft">
@@ -459,8 +423,20 @@
                         </div>
 
                         <div class="flex items-center gap-2">
+                            <div class="hidden rounded-lg bg-slate-200/70 p-0.5 sm:inline-flex" role="group" aria-label="Modo de la ventana">
+                                <button type="button" @click="cambiarModoModal('vista')" :aria-pressed="modoModal === 'vista' ? 'true' : 'false'"
+                                        class="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-semibold transition"
+                                        :class="modoModal === 'vista' ? 'bg-white text-inst-900 shadow-sm' : 'text-slate-600 hover:text-slate-900'">
+                                    <x-icon name="eye" class="h-3.5 w-3.5"/>Vista previa
+                                </button>
+                                <button type="button" @click="cambiarModoModal('edicion')" :aria-pressed="modoModal === 'edicion' ? 'true' : 'false'"
+                                        class="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-semibold transition"
+                                        :class="modoModal === 'edicion' ? 'bg-white text-inst-900 shadow-sm' : 'text-slate-600 hover:text-slate-900'">
+                                    <x-icon name="fingerprint" class="h-3.5 w-3.5"/>Datos y biometría
+                                </button>
+                            </div>
                             <template x-if="previewData">
-                                <span class="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold"
+                                <span class="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-semibold"
                                       :class="previewData.semaforo.es_completo ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'bg-amber-50 text-amber-800 border border-amber-200'">
                                     <span class="h-1.5 w-1.5 rounded-full" :class="previewData.semaforo.es_completo ? 'bg-emerald-500' : 'bg-amber-500'"></span>
                                     <span x-text="'Biometría ' + previewData.semaforo.completos + '/4'"></span>
@@ -469,7 +445,7 @@
                             <button type="button"
                                     @click="cerrarModalPrevisualizacion()"
                                     class="rounded-lg p-1.5 text-slate-400 hover:bg-slate-200 hover:text-slate-700 transition"
-                                    title="Cerrar ventana">
+                                    title="Cerrar ventana" aria-label="Cerrar vista previa">
                                 <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
                                 </svg>
@@ -500,7 +476,15 @@
                             <!-- ============================================== -->
                             <!-- PANEL IZQUIERDO: Mesa de Inspección Gráfica    -->
                             <!-- ============================================== -->
-                            <div class="lg:col-span-6 xl:col-span-7 bg-slate-100/80 p-3 sm:p-4 flex flex-col justify-between overflow-y-auto h-full">
+                            <div class="bg-slate-100/80 p-3 sm:p-4 flex flex-col justify-between overflow-y-auto h-full"
+                                 :class="modoModal === 'vista' ? 'lg:col-span-12' : 'lg:col-span-6 xl:col-span-7'">
+                                <!-- Conmutador de modo en pantallas pequeñas -->
+                                <div class="mb-2 grid grid-cols-2 rounded-lg bg-slate-200/70 p-0.5 sm:hidden" role="group" aria-label="Modo de la ventana">
+                                    <button type="button" @click="cambiarModoModal('vista')" :aria-pressed="modoModal === 'vista' ? 'true' : 'false'"
+                                            class="rounded-md px-2 py-1 text-xs font-semibold" :class="modoModal === 'vista' ? 'bg-white text-inst-900 shadow-sm' : 'text-slate-600'">Vista previa</button>
+                                    <button type="button" @click="cambiarModoModal('edicion')" :aria-pressed="modoModal === 'edicion' ? 'true' : 'false'"
+                                            class="rounded-md px-2 py-1 text-xs font-semibold" :class="modoModal === 'edicion' ? 'bg-white text-inst-900 shadow-sm' : 'text-slate-600'">Datos y biometría</button>
+                                </div>
                                 <!-- Selector de Anverso / Reverso con selector de versión y especificación técnica -->
                                 <div class="w-full flex flex-wrap items-center justify-between gap-2 mb-2 shrink-0">
                                     <div class="flex items-center gap-2">
@@ -562,6 +546,12 @@
                                         <!-- Brillo Especular de Acabado PVC Laminado -->
                                         <div class="pointer-events-none absolute inset-0 z-30 rounded-[14px] bg-gradient-to-tr from-transparent via-white/5 to-white/20 opacity-70"></div>
 
+                                        <!-- Lienzo físico idéntico a la vista térmica (mm/pt), escalado al visor para paridad WYSIWYG -->
+                                        <div data-card-canvas
+                                             class="absolute left-0 top-0 origin-top-left"
+                                             :style="`width: ${previewData.template.width_mm}mm; height: ${previewData.template.height_mm}mm; transform: scale(${escalaTarjeta});`"
+                                             x-effect="caraCredencial; previewData; $nextTick(() => ajustarTarjeta())"
+                                             @resize.window.debounce.150ms="ajustarTarjeta()">
                                         <!-- Fondo Institucional Reactivo -->
                                         <img :src="caraCredencial === 'front' ? previewData.template.front_bg : previewData.template.rear_bg"
                                              class="absolute inset-0 w-full h-full object-fill pointer-events-none transition-opacity duration-200"
@@ -571,18 +561,16 @@
                                         <template x-for="el in (caraCredencial === 'front' ? previewData.template.config.faces.front.elements : previewData.template.config.faces.rear.elements)"
                                                   :key="caraCredencial + '_' + el.id">
                                             <div x-show="el.visible"
-                                                 class="absolute"
+                                                 class="credential-print-element"
+                                                 :data-font-size="el.font_size"
+                                                 :data-rotation="el.rotation || 0"
+                                                 :data-width="el.width"
+                                                 :data-height="el.height"
                                                  :style="styleCardElement(el)">
                                                 
                                                 <!-- Caso 1 y 2: Texto Fijo o Campo Dinámico -->
                                                 <template x-if="el.kind === 'static' || el.kind === 'dynamic'">
                                                     <span :style="styleSpanText(el)"
-                                                          :class="{
-                                                              'font-mono font-bold tracking-tight text-red-600': el.field === 'folio' && !el.font_family,
-                                                              'font-mono font-bold tracking-wider': el.field === 'cuip' && !el.font_family,
-                                                              'font-extrabold': el.id === 'nombre' && !el.font_family,
-                                                              'font-bold': el.id === 'categoria' && !el.font_family
-                                                          }"
                                                           :title="getTextContent(el)"
                                                           x-text="getTextContent(el)"></span>
                                                 </template>
@@ -724,6 +712,7 @@
                                                 </template>
                                             </div>
                                         </template>
+                                        </div>
                                     </div>
                                 </div>
 
@@ -769,178 +758,150 @@
                             <!-- ============================================== -->
                             <!-- PANEL DERECHO: Consola de Periféricos y Biometría -->
                             <!-- ============================================== -->
-                            <div class="lg:col-span-6 xl:col-span-5 bg-white p-3 sm:p-4 overflow-y-auto flex flex-col justify-between h-full space-y-3">
-                                
-                                <div class="space-y-3.5">
-                                    <!-- Monitor de Periféricos de Estación -->
-                                    <div class="rounded-lg border border-slate-200 bg-slate-50/90 p-2.5 text-xs space-y-1.5 shadow-xs">
-                                        <div class="flex items-center justify-between border-b border-slate-200/80 pb-1">
-                                            <span class="font-bold uppercase tracking-wider text-slate-700 text-[10.5px] flex items-center gap-1.5">
-                                                <svg class="h-3.5 w-3.5 text-inst-700" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z"/>
-                                                </svg>
-                                                Periféricos de Estación
-                                            </span>
-                                            <span class="font-mono text-[10px] text-tx-soft" x-text="previewData.elemento.folio || 'Sin folio asignado'"></span>
-                                        </div>
-                                        <div class="grid grid-cols-3 gap-1.5 text-[10px]">
-                                            <div class="flex items-center gap-1.5 rounded bg-white px-2 py-1 border border-slate-200 shadow-xs">
-                                                <span class="h-2 w-2 rounded-full shrink-0" :class="camaraActiva ? 'bg-emerald-500 animate-pulse' : 'bg-slate-400'"></span>
-                                                <span class="truncate text-slate-700 font-medium" :title="camaraActiva ? 'Cámara activa' : 'Cámara lista'">📷 Cámara</span>
-                                            </div>
-                                            <div class="flex items-center gap-1.5 rounded bg-white px-2 py-1 border border-slate-200 shadow-xs">
-                                                <span class="h-2 w-2 rounded-full shrink-0" :class="padTopazEstado === 'conectado' ? 'bg-emerald-500' : (padTopazEstado === 'capturando' ? 'bg-blue-500 animate-pulse' : 'bg-amber-400')"></span>
-                                                <span class="truncate text-slate-700 font-medium" :title="padTopazEstado === 'conectado' ? 'Topaz conectado' : 'Lienzo / Topaz'">✒️ Pad / Lienzo</span>
-                                            </div>
-                                            <div class="flex items-center gap-1.5 rounded bg-white px-2 py-1 border border-slate-200 shadow-xs">
-                                                <span class="h-2 w-2 rounded-full shrink-0 bg-blue-500"></span>
-                                                <span class="truncate text-slate-700 font-medium" title="Lector Crossmatch / BMP / PNG">👆 Crossmatch</span>
-                                            </div>
-                                        </div>
+                            <div x-show="modoModal === 'edicion'" class="lg:col-span-6 xl:col-span-5 bg-white p-3 sm:p-4 overflow-y-auto flex flex-col justify-between h-full space-y-3">
+                                <div class="flex border-b border-linea" role="tablist" aria-label="Secciones de edición">
+                                    <button type="button" role="tab" @click="pestanaEdicion = 'biometria'" :aria-selected="pestanaEdicion === 'biometria' ? 'true' : 'false'"
+                                            class="-mb-px flex items-center gap-1.5 border-b-2 px-3 pb-2 text-sm font-medium transition-colors"
+                                            :class="pestanaEdicion === 'biometria' ? 'border-inst-700 text-inst-900' : 'border-transparent text-tx-soft hover:text-tx'">
+                                        <x-icon name="fingerprint" class="h-4 w-4"/>Estación biométrica
+                                        <span class="rounded-full px-1.5 text-2xs font-semibold" :class="componentesPendientes() ? 'bg-red-50 text-red-700' : 'bg-emerald-50 text-emerald-700'" x-text="componentesPendientes() ? componentesPendientes() + ' por atender' : '4/4'"></span>
+                                    </button>
+                                    <button type="button" role="tab" @click="pestanaEdicion = 'datos'" :aria-selected="pestanaEdicion === 'datos' ? 'true' : 'false'"
+                                            class="-mb-px flex items-center gap-1.5 border-b-2 px-3 pb-2 text-sm font-medium transition-colors"
+                                            :class="pestanaEdicion === 'datos' ? 'border-inst-700 text-inst-900' : 'border-transparent text-tx-soft hover:text-tx'">
+                                        <x-icon name="idcard" class="h-4 w-4"/>Datos de la credencial
+                                    </button>
+                                </div>
+
+                                <!-- Datos que alimentan la credencial: solo lectura (no existe edición desde Impresión) -->
+                                <section x-show="pestanaEdicion === 'datos'" class="space-y-4" aria-label="Datos de la credencial">
+                                    <div class="alert alert-info text-xs">
+                                        <x-icon name="info" class="mt-0.5 h-4 w-4 shrink-0"/>
+                                        <span>Estos datos provienen del padrón LOC, el inventario de armamento, las vigencias y la solicitud. No se editan desde Impresión: si alguno es incorrecto, corríjalo en su fuente y vuelva a abrir la vista previa.</span>
                                     </div>
+                                    @foreach ([
+                                        'Anverso' => ['folio' => 'Folio', 'numero_tarjeta' => 'Tarjeta de trabajo', 'cuip' => 'CUIP', 'nombre' => 'Nombre', 'categoria' => 'Categoría', 'fecha_elaboracion' => 'Fecha de elaboración', 'vigencia' => 'Vigencia'],
+                                        'Reverso' => ['subdireccion' => 'Subdirección', 'ubicacion' => 'Ubicación', 'tipo_arma' => 'Tipo de arma', 'clase_arma' => 'Clase', 'marca' => 'Marca', 'modelo' => 'Modelo', 'calibre' => 'Calibre', 'matricula' => 'Matrícula', 'rfa' => 'RFA', 'resguardo' => 'Resguardo'],
+                                    ] as $cara => $campos)
+                                        <div>
+                                            <h4 class="eyebrow mb-2">{{ $cara }}</h4>
+                                            <dl class="grid grid-cols-1 gap-x-4 gap-y-2 sm:grid-cols-2">
+                                                @foreach ($campos as $clave => $etiqueta)
+                                                    <div class="min-w-0 rounded-md bg-slate-50 px-2.5 py-1.5 ring-1 ring-slate-200">
+                                                        <dt class="text-2xs font-medium text-tx-soft">{{ $etiqueta }}</dt>
+                                                        <dd class="whitespace-pre-line break-words text-xs font-semibold text-tx" x-text="previewData.campos_valores.{{ $clave }} || '—'"></dd>
+                                                    </div>
+                                                @endforeach
+                                            </dl>
+                                        </div>
+                                    @endforeach
+                                </section>
+
+                                <div x-show="pestanaEdicion === 'biometria'" class="space-y-3.5">
+                                    <!-- Periféricos: solo estados que la estación puede comprobar; nada se da por conectado -->
+                                    <section class="rounded-lg border border-linea bg-slate-50/70 p-3" aria-labelledby="perifericos-titulo">
+                                        <div class="mb-2 flex items-center justify-between gap-2">
+                                            <h4 id="perifericos-titulo" class="eyebrow flex items-center gap-1.5"><x-icon name="device" class="h-3.5 w-3.5"/>Periféricos de la estación</h4>
+                                            <span class="font-mono text-2xs text-tx-soft" x-text="previewData.elemento.folio ? 'Folio ' + previewData.elemento.folio : 'Sin folio asignado'"></span>
+                                        </div>
+                                        <ul class="divide-y divide-slate-200 overflow-hidden rounded-md bg-white ring-1 ring-slate-200">
+                                            <li class="flex items-center gap-2.5 px-2.5 py-2" title="Cámara del navegador (getUserMedia)">
+                                                <x-icon name="camera" class="h-4 w-4 shrink-0 text-tx-soft"/>
+                                                <span class="flex min-w-0 flex-1 items-center justify-between gap-2">
+                                                    <span class="text-xs font-medium text-tx">Cámara</span>
+                                                    <span class="flex items-center gap-1 text-2xs" :class="camaraActiva ? 'text-emerald-700' : 'text-tx-soft'">
+                                                        <span class="h-1.5 w-1.5 shrink-0 rounded-full" :class="camaraActiva ? 'bg-emerald-500' : (camaraIniciando ? 'bg-inst-500 animate-pulse' : 'bg-slate-400')" aria-hidden="true"></span>
+                                                        <span x-text="camaraActiva ? 'Activa' : (camaraIniciando ? 'Iniciando…' : 'Inactiva')"></span>
+                                                    </span>
+                                                </span>
+                                            </li>
+                                            <li class="flex items-center gap-2.5 px-2.5 py-2" title="Cámara Canon EOS mediante el agente local de la estación (127.0.0.1)">
+                                                <x-icon name="camera" class="h-4 w-4 shrink-0 text-tx-soft"/>
+                                                <span class="flex min-w-0 flex-1 items-center justify-between gap-2">
+                                                    <span class="text-xs font-medium text-tx">Cámara Canon (agente)</span>
+                                                    <span class="flex items-center gap-1 text-2xs" :class="estadoCanon().texto">
+                                                        <span class="h-1.5 w-1.5 shrink-0 rounded-full" aria-hidden="true" :class="estadoCanon().punto"></span>
+                                                        <span x-text="estadoCanon().etiqueta"></span>
+                                                    </span>
+                                                </span>
+                                            </li>
+                                            <li class="flex items-center gap-2.5 px-2.5 py-2" title="Pad de firma Topaz mediante el servicio local SigWeb">
+                                                <x-icon name="pen" class="h-4 w-4 shrink-0 text-tx-soft"/>
+                                                <span class="flex min-w-0 flex-1 items-center justify-between gap-2">
+                                                    <span class="text-xs font-medium text-tx">Pad de firma</span>
+                                                    <span class="flex items-center gap-1 text-2xs" :class="estadoPadTopaz().texto">
+                                                        <span class="h-1.5 w-1.5 shrink-0 rounded-full" aria-hidden="true" :class="estadoPadTopaz().punto"></span>
+                                                        <span x-text="estadoPadTopaz().etiqueta"></span>
+                                                    </span>
+                                                </span>
+                                            </li>
+                                            <li class="flex items-center gap-2.5 px-2.5 py-2" title="Lector Cross Match Verifier 300 LC 2.0 mediante el agente local de la estación (127.0.0.1)">
+                                                <x-icon name="fingerprint" class="h-4 w-4 shrink-0 text-tx-soft"/>
+                                                <span class="flex min-w-0 flex-1 items-center justify-between gap-2">
+                                                    <span class="text-xs font-medium text-tx">Lector Cross Match (agente)</span>
+                                                    <span class="flex items-center gap-1 text-2xs" :class="estadoHuella().texto">
+                                                        <span class="h-1.5 w-1.5 shrink-0 rounded-full" aria-hidden="true" :class="estadoHuella().punto"></span>
+                                                        <span x-text="estadoHuella().etiqueta"></span>
+                                                    </span>
+                                                </span>
+                                            </li>
+                                        </ul>
+                                    </section>
 
                                     <!-- Matriz 2x2 de Micro-Tarjetas de Biometría (Slots de Expediente) -->
                                     <div>
                                         <div class="flex items-center justify-between mb-1.5">
-                                            <span class="text-xs font-bold uppercase tracking-wider text-slate-700">Expediente Biométrico</span>
-                                            <span class="text-[10.5px] font-semibold text-slate-500" x-text="'Completitud: ' + previewData.semaforo.completos + '/4'"></span>
+                                            <span class="text-xs font-bold uppercase tracking-wider text-slate-700">Expediente biométrico</span>
+                                            <span class="text-2xs text-tx-soft">Seleccione un componente para consultarlo o actualizarlo</span>
                                         </div>
                                         <div class="grid grid-cols-2 gap-2">
-                                            <!-- Slot 1: Foto Facial -->
-                                            <div @click="cambiarSlot('foto')"
-                                                 class="cursor-pointer rounded-lg p-2.5 transition-all text-left relative overflow-hidden"
-                                                 :class="slotActivo === 'foto' ? 'bg-inst-50/70 border-2 border-inst-700 shadow-xs' : 'bg-white border border-slate-200 hover:border-slate-300 hover:bg-slate-50/60'">
-                                                <div class="flex items-center justify-between">
-                                                    <span class="text-[11px] font-bold text-slate-900 flex items-center gap-1.5">
-                                                        📷 Foto Facial
-                                                    </span>
-                                                    <template x-if="previewData.biometricos.foto.existe">
-                                                        <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                                                            <span class="h-1 w-1 rounded-full bg-emerald-500"></span>
-                                                            Vigente
+                                            @foreach ([
+                                                ['key' => 'foto', 'label' => 'Fotografía', 'icon' => 'camera'],
+                                                ['key' => 'firma', 'label' => 'Firma', 'icon' => 'pen'],
+                                                ['key' => 'pulgar_izquierdo', 'label' => 'Pulgar izquierdo', 'icon' => 'fingerprint'],
+                                                ['key' => 'pulgar_derecho', 'label' => 'Pulgar derecho', 'icon' => 'fingerprint'],
+                                            ] as $slot)
+                                                @php $bio = "previewData.biometricos.{$slot['key']}"; @endphp
+                                                <div class="relative">
+                                                    <button type="button"
+                                                            @click="cambiarSlot('{{ $slot['key'] }}')"
+                                                            :aria-pressed="slotActivo === '{{ $slot['key'] }}' ? 'true' : 'false'"
+                                                            :title="tituloEstadoSlot('{{ $slot['key'] }}')"
+                                                            class="flex w-full items-center gap-2.5 rounded-lg p-2 pr-6 text-left transition-colors"
+                                                            :class="slotActivo === '{{ $slot['key'] }}' ? 'bg-inst-50 ring-2 ring-inst-600' : 'bg-white ring-1 ring-slate-200 hover:bg-slate-50 hover:ring-slate-300'">
+                                                        <span class="relative flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-md bg-slate-100 ring-1 ring-slate-200"
+                                                              :class="!urlPendiente('{{ $slot['key'] }}') && {{ $bio }}.url && miniaturas.{{ $slot['key'] }} === 'cargando' ? 'animate-pulse' : ''">
+                                                            <template x-if="urlPendiente('{{ $slot['key'] }}')">
+                                                                <img :src="urlPendiente('{{ $slot['key'] }}')" alt="Captura pendiente de guardar" class="h-full w-full bg-white object-contain ring-2 ring-inset ring-inst-500">
+                                                            </template>
+                                                            <template x-if="!urlPendiente('{{ $slot['key'] }}') && {{ $bio }}.url && miniaturas.{{ $slot['key'] }} !== 'error'">
+                                                                <img :src="{{ $bio }}.url" alt="" class="h-full w-full bg-white object-contain"
+                                                                     x-on:load="miniaturas.{{ $slot['key'] }} = 'ok'" x-on:error="miniaturas.{{ $slot['key'] }} = 'error'">
+                                                            </template>
+                                                            <template x-if="!urlPendiente('{{ $slot['key'] }}') && (!{{ $bio }}.url || miniaturas.{{ $slot['key'] }} === 'error')">
+                                                                <x-icon :name="$slot['icon']" class="h-5 w-5 text-slate-400"/>
+                                                            </template>
                                                         </span>
-                                                    </template>
-                                                    <template x-if="!previewData.biometricos.foto.existe">
-                                                        <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-50 text-amber-700 border border-amber-200">
-                                                            <span class="h-1 w-1 rounded-full bg-amber-500"></span>
-                                                            Falta
+                                                        <span class="min-w-0 flex-1">
+                                                            <span class="block text-xs font-semibold text-tx">{{ $slot['label'] }}</span>
+                                                            <span class="mt-1 inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-2xs font-semibold ring-1 ring-inset"
+                                                                  :class="claseEstadoSlot('{{ $slot['key'] }}')">
+                                                                <span class="h-1.5 w-1.5 rounded-full bg-current" aria-hidden="true"></span>
+                                                                <span x-text="etiquetaEstadoSlot('{{ $slot['key'] }}')"></span>
+                                                            </span>
+                                                            <span class="mt-1 block truncate font-mono text-2xs text-tx-soft"
+                                                                  x-text="{{ $bio }}.existe ? ('v' + ({{ $bio }}.version || 1) + ' · ' + ({{ $bio }}.sha256 ? {{ $bio }}.sha256.substring(0, 8) + '…' : 'sin hash')) : 'Sin archivo registrado'"></span>
                                                         </span>
-                                                    </template>
-                                                </div>
-                                                <div class="mt-2 flex items-center justify-between text-[10px] text-slate-500 border-t border-slate-100 pt-1.5">
-                                                    <span class="font-semibold text-slate-600" x-text="'v' + (previewData.biometricos.foto.version || 1)"></span>
-                                                    <div class="flex items-center gap-1 font-mono text-[9px]" :title="previewData.biometricos.foto.sha256 || 'Sin registro'">
-                                                        <span x-text="previewData.biometricos.foto.sha256 ? previewData.biometricos.foto.sha256.substring(0, 8) + '...' : '—'"></span>
-                                                        <template x-if="previewData.biometricos.foto.sha256">
-                                                            <button type="button" @click.stop="copiarHash(previewData.biometricos.foto.sha256)" class="text-slate-400 hover:text-inst-700" title="Copiar SHA-256">
-                                                                <svg class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
-                                                            </button>
-                                                        </template>
-                                                    </div>
-                                                </div>
-                                            </div>
-
-                                            <!-- Slot 2: Firma Digital -->
-                                            <div @click="cambiarSlot('firma')"
-                                                 class="cursor-pointer rounded-lg p-2.5 transition-all text-left relative overflow-hidden"
-                                                 :class="slotActivo === 'firma' ? 'bg-inst-50/70 border-2 border-inst-700 shadow-xs' : 'bg-white border border-slate-200 hover:border-slate-300 hover:bg-slate-50/60'">
-                                                <div class="flex items-center justify-between">
-                                                    <span class="text-[11px] font-bold text-slate-900 flex items-center gap-1.5">
-                                                        ✒️ Firma Digital
-                                                    </span>
-                                                    <template x-if="previewData.biometricos.firma.existe">
-                                                        <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                                                            <span class="h-1 w-1 rounded-full bg-emerald-500"></span>
-                                                            Vigente
-                                                        </span>
-                                                    </template>
-                                                    <template x-if="!previewData.biometricos.firma.existe">
-                                                        <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-50 text-amber-700 border border-amber-200">
-                                                            <span class="h-1 w-1 rounded-full bg-amber-500"></span>
-                                                            Falta
-                                                        </span>
+                                                    </button>
+                                                    <template x-if="{{ $bio }}.sha256">
+                                                        <button type="button" @click="copiarHash({{ $bio }}.sha256)"
+                                                                class="absolute bottom-2 right-2 rounded p-0.5 text-slate-400 hover:bg-slate-100 hover:text-inst-700"
+                                                                title="Copiar SHA-256" aria-label="Copiar SHA-256 de {{ mb_strtolower($slot['label']) }}">
+                                                            <x-icon name="copy" class="h-3 w-3"/>
+                                                        </button>
                                                     </template>
                                                 </div>
-                                                <div class="mt-2 flex items-center justify-between text-[10px] text-slate-500 border-t border-slate-100 pt-1.5">
-                                                    <span class="font-semibold text-slate-600" x-text="'v' + (previewData.biometricos.firma.version || 1)"></span>
-                                                    <div class="flex items-center gap-1 font-mono text-[9px]" :title="previewData.biometricos.firma.sha256 || 'Sin registro'">
-                                                        <span x-text="previewData.biometricos.firma.sha256 ? previewData.biometricos.firma.sha256.substring(0, 8) + '...' : '—'"></span>
-                                                        <template x-if="previewData.biometricos.firma.sha256">
-                                                            <button type="button" @click.stop="copiarHash(previewData.biometricos.firma.sha256)" class="text-slate-400 hover:text-inst-700" title="Copiar SHA-256">
-                                                                <svg class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
-                                                            </button>
-                                                        </template>
-                                                    </div>
-                                                </div>
-                                            </div>
-
-                                            <!-- Slot 3: Pulgar Izquierdo -->
-                                            <div @click="cambiarSlot('pulgar_izquierdo')"
-                                                 class="cursor-pointer rounded-lg p-2.5 transition-all text-left relative overflow-hidden"
-                                                 :class="slotActivo === 'pulgar_izquierdo' ? 'bg-inst-50/70 border-2 border-inst-700 shadow-xs' : 'bg-white border border-slate-200 hover:border-slate-300 hover:bg-slate-50/60'">
-                                                <div class="flex items-center justify-between">
-                                                    <span class="text-[11px] font-bold text-slate-900 flex items-center gap-1.5">
-                                                        👆 Pulgar Izquierdo
-                                                    </span>
-                                                    <template x-if="previewData.biometricos.pulgar_izquierdo.existe">
-                                                        <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                                                            <span class="h-1 w-1 rounded-full bg-emerald-500"></span>
-                                                            Vigente
-                                                        </span>
-                                                    </template>
-                                                    <template x-if="!previewData.biometricos.pulgar_izquierdo.existe">
-                                                        <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-50 text-amber-700 border border-amber-200">
-                                                            <span class="h-1 w-1 rounded-full bg-amber-500"></span>
-                                                            Falta
-                                                        </span>
-                                                    </template>
-                                                </div>
-                                                <div class="mt-2 flex items-center justify-between text-[10px] text-slate-500 border-t border-slate-100 pt-1.5">
-                                                    <span class="font-semibold text-slate-600" x-text="'v' + (previewData.biometricos.pulgar_izquierdo.version || 1)"></span>
-                                                    <div class="flex items-center gap-1 font-mono text-[9px]" :title="previewData.biometricos.pulgar_izquierdo.sha256 || 'Sin registro'">
-                                                        <span x-text="previewData.biometricos.pulgar_izquierdo.sha256 ? previewData.biometricos.pulgar_izquierdo.sha256.substring(0, 8) + '...' : '—'"></span>
-                                                        <template x-if="previewData.biometricos.pulgar_izquierdo.sha256">
-                                                            <button type="button" @click.stop="copiarHash(previewData.biometricos.pulgar_izquierdo.sha256)" class="text-slate-400 hover:text-inst-700" title="Copiar SHA-256">
-                                                                <svg class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
-                                                            </button>
-                                                        </template>
-                                                    </div>
-                                                </div>
-                                            </div>
-
-                                            <!-- Slot 4: Pulgar Derecho -->
-                                            <div @click="cambiarSlot('pulgar_derecho')"
-                                                 class="cursor-pointer rounded-lg p-2.5 transition-all text-left relative overflow-hidden"
-                                                 :class="slotActivo === 'pulgar_derecho' ? 'bg-inst-50/70 border-2 border-inst-700 shadow-xs' : 'bg-white border border-slate-200 hover:border-slate-300 hover:bg-slate-50/60'">
-                                                <div class="flex items-center justify-between">
-                                                    <span class="text-[11px] font-bold text-slate-900 flex items-center gap-1.5">
-                                                        👆 Pulgar Derecho
-                                                    </span>
-                                                    <template x-if="previewData.biometricos.pulgar_derecho.existe">
-                                                        <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                                                            <span class="h-1 w-1 rounded-full bg-emerald-500"></span>
-                                                            Vigente
-                                                        </span>
-                                                    </template>
-                                                    <template x-if="!previewData.biometricos.pulgar_derecho.existe">
-                                                        <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-50 text-amber-700 border border-amber-200">
-                                                            <span class="h-1 w-1 rounded-full bg-amber-500"></span>
-                                                            Falta
-                                                        </span>
-                                                    </template>
-                                                </div>
-                                                <div class="mt-2 flex items-center justify-between text-[10px] text-slate-500 border-t border-slate-100 pt-1.5">
-                                                    <span class="font-semibold text-slate-600" x-text="'v' + (previewData.biometricos.pulgar_derecho.version || 1)"></span>
-                                                    <div class="flex items-center gap-1 font-mono text-[9px]" :title="previewData.biometricos.pulgar_derecho.sha256 || 'Sin registro'">
-                                                        <span x-text="previewData.biometricos.pulgar_derecho.sha256 ? previewData.biometricos.pulgar_derecho.sha256.substring(0, 8) + '...' : '—'"></span>
-                                                        <template x-if="previewData.biometricos.pulgar_derecho.sha256">
-                                                            <button type="button" @click.stop="copiarHash(previewData.biometricos.pulgar_derecho.sha256)" class="text-slate-400 hover:text-inst-700" title="Copiar SHA-256">
-                                                                <svg class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
-                                                            </button>
-                                                        </template>
-                                                    </div>
-                                                </div>
-                                            </div>
+                                            @endforeach
                                         </div>
                                     </div>
 
@@ -951,11 +912,15 @@
                                         <!-- Sub-pestañas de Fotografía -->
                                         <div class="flex items-center justify-between border-b border-slate-200 pb-1.5">
                                             <span class="text-xs font-semibold text-slate-800">1. Fotografía Facial</span>
-                                            <div class="inline-flex rounded-md bg-slate-100 p-0.5 text-[10.5px]">
+                                            <div class="inline-flex rounded-md bg-slate-100 p-0.5 text-2xs">
                                                 <button type="button"
                                                         @click="modoCapturaFoto = 'camara'"
                                                         :class="modoCapturaFoto === 'camara' ? 'bg-white text-inst-900 font-bold shadow-2xs' : 'text-slate-600 hover:text-slate-900'"
                                                         class="rounded px-2.5 py-0.5 transition">Cámara Web / USB</button>
+                                                <button type="button"
+                                                        @click="modoCapturaFoto = 'canon'"
+                                                        :class="modoCapturaFoto === 'canon' ? 'bg-white text-inst-900 font-bold shadow-2xs' : 'text-slate-600 hover:text-slate-900'"
+                                                        class="rounded px-2.5 py-0.5 transition">Canon EOS (agente)</button>
                                                 <button type="button"
                                                         @click="modoCapturaFoto = 'archivo'"
                                                         :class="modoCapturaFoto === 'archivo' ? 'bg-white text-inst-900 font-bold shadow-2xs' : 'text-slate-600 hover:text-slate-900'"
@@ -977,8 +942,8 @@
                                                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"/>
                                                             </svg>
                                                         </div>
-                                                        <p class="text-xs font-semibold text-slate-200">Cámara desconectada</p>
-                                                        <p class="text-[10px] text-slate-400 mt-0.5">Active la cámara para captura pericial en vivo.</p>
+                                                        <p class="text-xs font-semibold text-slate-200">Cámara inactiva</p>
+                                                        <p class="text-2xs text-slate-400 mt-0.5">Active la cámara para captura pericial en vivo.</p>
                                                         <button type="button"
                                                                 @click="iniciarCamara()"
                                                                 :disabled="camaraIniciando"
@@ -1006,7 +971,7 @@
                                                     </div>
 
                                                     <div class="absolute bottom-2 inset-x-2 flex items-center justify-between gap-1">
-                                                        <button type="button" @click="detenerCamara()" class="rounded bg-black/60 px-2 py-1 text-[10px] text-white hover:bg-black/80 transition">Detener</button>
+                                                        <button type="button" @click="detenerCamara()" class="rounded bg-black/60 px-2 py-1 text-2xs text-white hover:bg-black/80 transition">Detener</button>
                                                         <button type="button" @click="capturarFoto()" class="rounded-md bg-rose-600 px-3 py-1 text-xs font-bold text-white shadow-sm hover:bg-rose-700 transition flex items-center gap-1">
                                                             <span class="h-2 w-2 rounded-full bg-white animate-ping"></span>
                                                             Capturar
@@ -1018,13 +983,76 @@
                                                 <div x-show="fotoCapturadaUrl" class="relative w-full h-full bg-black">
                                                     <img :src="fotoCapturadaUrl" class="w-full h-full object-cover" alt="Fotografía capturada">
                                                     <div class="absolute bottom-2 inset-x-2 flex items-center justify-between gap-1 bg-black/60 p-1.5 rounded">
-                                                        <span class="text-[10px] text-emerald-400 font-semibold">✓ Fotograma 3:4</span>
-                                                        <button type="button" @click="descartarFotoCapturada()" class="rounded bg-slate-700 px-2 py-0.5 text-[10px] text-white hover:bg-slate-600 transition">Reintentar</button>
+                                                        <span class="text-2xs text-emerald-400 font-semibold">✓ Fotograma 3:4</span>
+                                                        <button type="button" @click="descartarFotoCapturada()" class="rounded bg-slate-700 px-2 py-0.5 text-2xs text-white hover:bg-slate-600 transition">Reintentar</button>
                                                     </div>
                                                 </div>
                                             </div>
 
                                             <div x-show="camaraError" class="text-[11px] text-rose-600 font-medium text-center" x-text="camaraError"></div>
+                                        </div>
+
+                                        <!-- Canal C: Cámara Canon EOS mediante el agente local de la estación -->
+                                        <div x-show="modoCapturaFoto === 'canon'" class="rounded-lg border border-slate-200 bg-slate-50 p-3.5 space-y-2.5">
+                                            <div class="flex items-center justify-between">
+                                                <span class="text-xs font-bold text-slate-800">Canon EOS Rebel T6 · agente de estación</span>
+                                                <span class="flex items-center gap-1 rounded px-2 py-0.5 text-2xs font-bold" :class="estadoCanon().insignia" role="status">
+                                                    <span class="h-1.5 w-1.5 shrink-0 rounded-full" aria-hidden="true" :class="estadoCanon().punto"></span>
+                                                    <span x-text="estadoCanon().etiqueta"></span>
+                                                </span>
+                                            </div>
+
+                                            <div x-show="canonSimulacion" class="rounded border border-amber-300 bg-amber-50 p-2 text-2xs font-semibold text-amber-900">
+                                                Modo simulación del agente: las imágenes no provienen de una cámara y no pueden guardarse en el expediente.
+                                            </div>
+
+                                            <div class="relative mx-auto aspect-[3/4] w-full max-w-[280px] overflow-hidden rounded-lg border border-slate-300 bg-slate-900">
+                                                <template x-if="canonCapturaUrl">
+                                                    <img :src="canonCapturaUrl" class="h-full w-full object-cover" alt="Fotografía capturada con la cámara Canon">
+                                                </template>
+                                                <template x-if="!canonCapturaUrl && canonVistaUrl">
+                                                    <img :src="canonVistaUrl" class="h-full w-full object-cover" alt="Vista previa de la cámara Canon">
+                                                </template>
+                                                <template x-if="!canonCapturaUrl && !canonVistaUrl">
+                                                    <div class="flex h-full items-center justify-center p-4 text-center text-2xs text-slate-300" x-text="canonEstado === 'vista_previa' ? 'Esperando fotograma…' : 'Sin vista previa'"></div>
+                                                </template>
+                                                <div x-show="canonEstado === 'vista_previa' && canonVistaUrl" class="pointer-events-none absolute inset-0">
+                                                    <svg class="h-full w-full text-emerald-400/80" viewBox="0 0 200 260" fill="none" aria-hidden="true">
+                                                        <ellipse cx="100" cy="115" rx="55" ry="75" stroke="currentColor" stroke-width="1.8" stroke-dasharray="4 2"/>
+                                                        <line x1="60" y1="95" x2="140" y2="95" stroke="currentColor" stroke-width="1" stroke-dasharray="2 2"/>
+                                                        <line x1="75" y1="190" x2="125" y2="190" stroke="currentColor" stroke-width="1.5"/>
+                                                    </svg>
+                                                </div>
+                                            </div>
+
+                                            <div x-show="canonMensaje" class="rounded border bg-white p-2 text-2xs" :class="canonEstado === 'error' ? 'border-red-300 text-red-800' : 'border-slate-200 text-slate-700'" x-text="canonMensaje" aria-live="polite"></div>
+
+                                            <div class="flex flex-wrap items-center gap-2">
+                                                <button type="button" @click="verificarCanon()" :disabled="canonProcesando || ['vista_previa', 'capturada'].includes(canonEstado)"
+                                                        class="rounded border border-slate-300 bg-white px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50 transition disabled:cursor-not-allowed disabled:opacity-50">
+                                                    Verificar cámara
+                                                </button>
+                                                <button type="button" x-show="!['vista_previa', 'capturada'].includes(canonEstado)" @click="iniciarCanon()" :disabled="canonProcesando || !elementoSeleccionadoId"
+                                                        class="rounded bg-inst-700 px-3 py-1 text-xs font-semibold text-white shadow-2xs hover:bg-inst-800 transition disabled:cursor-not-allowed disabled:opacity-50">
+                                                    Iniciar vista previa
+                                                </button>
+                                                <button type="button" x-show="canonEstado === 'vista_previa'" @click="capturarCanon()" :disabled="canonProcesando"
+                                                        class="rounded bg-rose-600 px-3 py-1 text-xs font-semibold text-white shadow-2xs hover:bg-rose-700 transition disabled:opacity-50">
+                                                    Capturar
+                                                </button>
+                                                <button type="button" x-show="canonEstado === 'capturada'" @click="repetirCanon()" :disabled="canonProcesando"
+                                                        class="rounded border border-slate-300 bg-white px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50 transition disabled:opacity-50">
+                                                    Repetir
+                                                </button>
+                                                <button type="button" x-show="canonEstado === 'capturada' && !canonSimulacion" @click="usarFotoCanon()" :disabled="canonProcesando"
+                                                        class="rounded bg-emerald-700 px-3 py-1 text-xs font-semibold text-white shadow-2xs hover:bg-emerald-800 transition disabled:opacity-50">
+                                                    Usar fotografía
+                                                </button>
+                                                <button type="button" x-show="['vista_previa', 'capturada'].includes(canonEstado)" @click="cancelarCanon()" :disabled="canonProcesando"
+                                                        class="rounded border border-slate-300 bg-white px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50 transition disabled:opacity-50">
+                                                    Cancelar
+                                                </button>
+                                            </div>
                                         </div>
 
                                         <!-- Canal B: Archivo / Carpeta EOS Utility -->
@@ -1040,7 +1068,7 @@
                                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/>
                                                     </svg>
                                                     <span class="mt-2 block text-xs font-semibold text-inst-800">Seleccionar foto o arrastrar archivo</span>
-                                                    <span class="mt-0.5 block text-[10px] text-tx-soft">Compatible con carpeta de descarga de EOS Utility y cámaras USB (JPG/PNG).</span>
+                                                    <span class="mt-0.5 block text-2xs text-tx-soft">Compatible con carpeta de descarga de EOS Utility y cámaras USB (JPG/PNG).</span>
                                                 </label>
                                             </div>
                                         </div>
@@ -1053,7 +1081,7 @@
                                         <!-- Sub-pestañas de Firma -->
                                         <div class="flex items-center justify-between border-b border-slate-200 pb-1.5">
                                             <span class="text-xs font-semibold text-slate-800">2. Firma Digital</span>
-                                            <div class="inline-flex rounded-md bg-slate-100 p-0.5 text-[10.5px]">
+                                            <div class="inline-flex rounded-md bg-slate-100 p-0.5 text-2xs">
                                                 <button type="button"
                                                         @click="modoCapturaFirma = 'lienzo'; iniciarCanvasFirma();"
                                                         :class="modoCapturaFirma === 'lienzo' ? 'bg-white text-inst-900 font-bold shadow-2xs' : 'text-slate-600 hover:text-slate-900'"
@@ -1078,11 +1106,11 @@
                                                     </svg>
                                                     Previsualización de Firma Capturada
                                                 </span>
-                                                <span class="text-[10px] font-mono text-slate-500">Canal alfa (PNG)</span>
+                                                <span class="text-2xs font-mono text-slate-500">Canal alfa (PNG)</span>
                                             </div>
                                             <div class="relative bg-slate-50 border border-slate-200 rounded p-2 flex items-center justify-center min-h-[95px]">
                                                 <img :src="firmaTempPreviewUrl" class="max-h-20 max-w-full object-contain" alt="Vista previa de firma capturada">
-                                                <div class="absolute bottom-1 right-2 text-[9px] text-slate-400 italic">Verificación pericial</div>
+                                                <div class="absolute bottom-1 right-2 text-2xs text-slate-400 italic">Verificación pericial</div>
                                             </div>
                                             <div class="flex items-center justify-between pt-1">
                                                 <button type="button" @click="descartarFirmaPreview()" class="rounded border border-slate-300 bg-white px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50 transition">
@@ -1099,7 +1127,7 @@
                                                 <svg class="h-4 w-4 text-emerald-600 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
                                                 <span>Firma preparada para sincronizar</span>
                                             </div>
-                                            <button type="button" @click="firmaTempPreviewUrl = (firmaCapturadaUrl || (archivosSeleccionados.firma ? URL.createObjectURL(archivosSeleccionados.firma) : null)); modalFirmaPreview = true;" class="text-xs font-bold text-inst-700 hover:underline">Ver trazo</button>
+                                            <button type="button" @click="abrirPreviewFirma()" class="text-xs font-bold text-inst-700 hover:underline">Ver trazo</button>
                                         </div>
 
                                         <!-- Canal A: Lienzo Táctil HTML5 con Suavizado Bézier -->
@@ -1112,12 +1140,12 @@
                                                         @pointerup="handlePointerUp($event)"
                                                         @pointerleave="handlePointerUp($event)"></canvas>
                                                 
-                                                <div class="absolute bottom-1.5 left-2.5 pointer-events-none text-[9.5px] text-slate-400 italic">
+                                                <div class="absolute bottom-1.5 left-2.5 pointer-events-none text-2xs text-slate-400 italic">
                                                     Firme con lápiz óptico, pantalla táctil o ratón
                                                 </div>
 
                                                 <div class="absolute top-1.5 right-2 flex items-center gap-1">
-                                                    <span class="rounded bg-slate-100 px-1.5 py-0.5 text-[9px] font-mono text-slate-600" x-text="firmaTrazos > 0 ? firmaTrazos + ' trazos' : 'En espera'"></span>
+                                                    <span class="rounded bg-slate-100 px-1.5 py-0.5 text-2xs font-mono text-slate-600" x-text="firmaTrazos > 0 ? firmaTrazos + ' trazos' : 'En espera'"></span>
                                                 </div>
                                             </div>
 
@@ -1140,28 +1168,56 @@
                                         <div x-show="modoCapturaFirma === 'pad'" class="rounded-lg border border-slate-200 bg-slate-50 p-3.5 space-y-2.5">
                                             <div class="flex items-center justify-between">
                                                 <span class="text-xs font-bold text-slate-800">Controlador Topaz SigLite LCD 1x5</span>
-                                                <span class="rounded px-2 py-0.5 text-[9.5px] font-bold"
-                                                      :class="padTopazEstado === 'conectado' ? 'bg-emerald-100 text-emerald-800' : (padTopazEstado === 'capturando' ? 'bg-blue-100 text-blue-800' : 'bg-amber-100 text-amber-800')"
-                                                      x-text="padTopazEstado === 'conectado' ? 'SigWeb OK' : (padTopazEstado === 'capturando' ? 'Comunicando...' : 'Pendiente')"></span>
+                                                <span class="flex items-center gap-1 rounded px-2 py-0.5 text-2xs font-bold" :class="estadoPadTopaz().insignia" role="status">
+                                                    <span class="h-1.5 w-1.5 shrink-0 rounded-full" aria-hidden="true" :class="estadoPadTopaz().punto"></span>
+                                                    <span x-text="estadoPadTopaz().etiqueta"></span>
+                                                </span>
                                             </div>
 
                                             <p class="text-[11px] text-tx-soft leading-relaxed">
-                                                Interactúa directamente con el servicio local de Topaz <code class="font-mono text-[10px] bg-slate-200/80 px-1 py-0.5 rounded">SigWeb</code> ejecutado en <code class="font-mono text-[10px] bg-slate-200/80 px-1 py-0.5 rounded">localhost:47289</code>.
+                                                Captura con el SDK oficial <code class="font-mono text-2xs bg-slate-200/80 px-1 py-0.5 rounded">SigWebTablet.js</code> a través del servicio local SigWeb de esta estación<span x-show="padTopazVersion" x-text="' (versión ' + padTopazVersion + ')'"></span>.
                                             </p>
 
-                                            <div x-show="padTopazMensaje" class="rounded bg-white p-2 border border-slate-200 text-[10.5px] text-slate-700 font-mono" x-text="padTopazMensaje"></div>
+                                            <div class="rounded border border-slate-300 bg-white p-1.5">
+                                                {{-- El SDK dibuja aquí el trazo en vivo; las dimensiones internas son las que recibe SetDisplayXSize/YSize. --}}
+                                                <canvas id="canvasTopazFirma" width="500" height="100"
+                                                        class="block h-auto w-full"
+                                                        :class="padTopazEstado === 'capturando' ? 'ring-2 ring-inst-500' : ''"
+                                                        aria-label="Vista previa del trazo capturado en el pad Topaz"></canvas>
+                                            </div>
 
-                                            <div class="flex items-center gap-2">
+                                            <div x-show="padTopazMensaje" class="rounded bg-white p-2 border border-slate-200 text-2xs text-slate-700" :class="padTopazEstado === 'error' ? 'border-red-300 text-red-800' : ''" x-text="padTopazMensaje" aria-live="polite"></div>
+
+                                            <div class="flex flex-wrap items-center gap-2">
                                                 <button type="button"
                                                         @click="verificarSigWeb()"
-                                                        class="rounded border border-slate-300 bg-white px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50 transition">
-                                                    Probar Servicio SigWeb
+                                                        :disabled="padTopazEstado === 'capturando' || padTopazProcesando"
+                                                        class="rounded border border-slate-300 bg-white px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50 transition disabled:cursor-not-allowed disabled:opacity-50">
+                                                    Verificar pad
                                                 </button>
                                                 <button type="button"
-                                                        @click="activarPadTopaz()"
-                                                        class="rounded bg-inst-700 px-3 py-1 text-xs font-semibold text-white shadow-2xs hover:bg-inst-800 transition">
-                                                    Activar Pad Topaz
+                                                        x-show="padTopazEstado !== 'capturando'"
+                                                        @click="iniciarCapturaTopaz()"
+                                                        :disabled="padTopazProcesando || !elementoSeleccionadoId"
+                                                        class="rounded bg-inst-700 px-3 py-1 text-xs font-semibold text-white shadow-2xs hover:bg-inst-800 transition disabled:cursor-not-allowed disabled:opacity-50">
+                                                    Iniciar captura
                                                 </button>
+                                                <template x-if="padTopazEstado === 'capturando'">
+                                                    <div class="flex flex-wrap items-center gap-2">
+                                                        <button type="button" @click="limpiarCapturaTopaz()" :disabled="padTopazProcesando"
+                                                                class="rounded border border-slate-300 bg-white px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50 transition disabled:opacity-50">
+                                                            Limpiar
+                                                        </button>
+                                                        <button type="button" @click="cancelarCapturaTopaz()" :disabled="padTopazProcesando"
+                                                                class="rounded border border-slate-300 bg-white px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50 transition disabled:opacity-50">
+                                                            Cancelar
+                                                        </button>
+                                                        <button type="button" @click="aceptarCapturaTopaz()" :disabled="padTopazProcesando"
+                                                                class="rounded bg-emerald-700 px-3 py-1 text-xs font-semibold text-white shadow-2xs hover:bg-emerald-800 transition disabled:opacity-50">
+                                                            <span x-text="padTopazProcesando ? 'Obteniendo firma…' : 'Aceptar firma'"></span>
+                                                        </button>
+                                                    </div>
+                                                </template>
                                             </div>
                                         </div>
 
@@ -1178,7 +1234,7 @@
                                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/>
                                                     </svg>
                                                     <span class="mt-2 block text-xs font-semibold text-inst-800">Seleccionar archivo de firma</span>
-                                                    <span class="mt-0.5 block text-[10px] text-tx-soft">Formatos admitidos: PNG transparente o JPG (máx. 2MB).</span>
+                                                    <span class="mt-0.5 block text-2xs text-tx-soft">Formatos admitidos: PNG transparente o JPG (máx. 2MB).</span>
                                                 </label>
                                             </div>
                                         </div>
@@ -1190,8 +1246,63 @@
                                     <div x-show="slotActivo === 'pulgar_izquierdo' || slotActivo === 'pulgar_derecho'" class="space-y-3">
                                         <div class="flex items-center justify-between border-b border-slate-200 pb-1.5">
                                             <span class="text-xs font-semibold text-slate-800" x-text="slotActivo === 'pulgar_izquierdo' ? '3. Huella Pulgar Izquierdo' : '4. Huella Pulgar Derecho'"></span>
-                                            <span class="rounded bg-blue-50 text-blue-700 px-2 py-0.5 text-[10px] font-bold">Lector Crossmatch / BMP / PNG</span>
+                                            <span class="flex items-center gap-1 rounded px-2 py-0.5 text-2xs font-bold" :class="estadoHuella().insignia" role="status">
+                                                <span class="h-1.5 w-1.5 shrink-0 rounded-full" aria-hidden="true" :class="estadoHuella().punto"></span>
+                                                <span x-text="estadoHuella().etiqueta"></span>
+                                            </span>
                                         </div>
+
+                                        <!-- Captura con el lector Cross Match mediante el agente local de la estación -->
+                                        <div class="rounded-lg border border-slate-200 bg-slate-50 p-3.5 space-y-2.5">
+                                            <span class="text-xs font-bold text-slate-800">Cross Match Verifier 300 LC 2.0 · agente de estación</span>
+
+                                            <div x-show="huellaSimulacion" class="rounded border border-amber-300 bg-amber-50 p-2 text-2xs font-semibold text-amber-900">
+                                                Modo simulación del agente: las imágenes no provienen de un lector y no pueden guardarse en el expediente.
+                                            </div>
+
+                                            <div class="mx-auto flex aspect-[4/5] w-full max-w-[200px] items-center justify-center overflow-hidden rounded-lg border border-slate-300 bg-white">
+                                                <template x-if="huellaCapturaUrl">
+                                                    <img :src="huellaCapturaUrl" class="h-full w-full object-contain" alt="Huella capturada con el lector Cross Match">
+                                                </template>
+                                                <template x-if="!huellaCapturaUrl && huellaVistaUrl">
+                                                    <img :src="huellaVistaUrl" class="h-full w-full object-contain" alt="Vista previa del lector Cross Match">
+                                                </template>
+                                                <template x-if="!huellaCapturaUrl && !huellaVistaUrl">
+                                                    <span class="p-3 text-center text-2xs text-tx-soft" x-text="huellaEstado === 'vista_previa' ? 'Coloque el dedo sobre el cristal…' : (huellaEstado === 'inicializando' ? 'Inicializando el lector…' : 'Sin vista previa')"></span>
+                                                </template>
+                                            </div>
+
+                                            <div x-show="huellaMensaje" class="rounded border bg-white p-2 text-2xs" :class="huellaEstado === 'error' ? 'border-red-300 text-red-800' : 'border-slate-200 text-slate-700'" x-text="huellaMensaje" aria-live="polite"></div>
+
+                                            <div class="flex flex-wrap items-center gap-2">
+                                                <button type="button" @click="verificarHuella()" :disabled="huellaProcesando || ['vista_previa', 'capturada', 'inicializando'].includes(huellaEstado)"
+                                                        class="rounded border border-slate-300 bg-white px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50 transition disabled:cursor-not-allowed disabled:opacity-50">
+                                                    Verificar lector
+                                                </button>
+                                                <button type="button" x-show="!['vista_previa', 'capturada', 'inicializando'].includes(huellaEstado)" @click="iniciarHuella()" :disabled="huellaProcesando || !elementoSeleccionadoId"
+                                                        class="rounded bg-inst-700 px-3 py-1 text-xs font-semibold text-white shadow-2xs hover:bg-inst-800 transition disabled:cursor-not-allowed disabled:opacity-50">
+                                                    Iniciar captura
+                                                </button>
+                                                <button type="button" x-show="huellaEstado === 'vista_previa'" @click="capturarHuella()" :disabled="huellaProcesando"
+                                                        class="rounded bg-rose-600 px-3 py-1 text-xs font-semibold text-white shadow-2xs hover:bg-rose-700 transition disabled:opacity-50">
+                                                    Capturar huella
+                                                </button>
+                                                <button type="button" x-show="huellaEstado === 'capturada'" @click="repetirHuella()" :disabled="huellaProcesando"
+                                                        class="rounded border border-slate-300 bg-white px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50 transition disabled:opacity-50">
+                                                    Repetir
+                                                </button>
+                                                <button type="button" x-show="huellaEstado === 'capturada' && !huellaSimulacion" @click="usarHuella()" :disabled="huellaProcesando"
+                                                        class="rounded bg-emerald-700 px-3 py-1 text-xs font-semibold text-white shadow-2xs hover:bg-emerald-800 transition disabled:opacity-50">
+                                                    Usar huella
+                                                </button>
+                                                <button type="button" x-show="['vista_previa', 'capturada'].includes(huellaEstado)" @click="cancelarHuella()" :disabled="huellaProcesando"
+                                                        class="rounded border border-slate-300 bg-white px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50 transition disabled:opacity-50">
+                                                    Cancelar
+                                                </button>
+                                            </div>
+                                        </div>
+
+                                        <p class="text-2xs font-semibold uppercase tracking-wide text-tx-soft">O importe el archivo exportado por el software del lector</p>
 
                                         <!-- Selector / Dropzone para Huella -->
                                         <div class="rounded-lg border-2 border-dashed border-slate-300 bg-slate-50 p-4 text-center hover:bg-slate-100 transition">
@@ -1205,7 +1316,7 @@
                                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 11c0 3.517-1.009 6.799-2.753 9.571m-3.44-2.04l.054-.09A13.916 13.916 0 008 11a4 4 0 118 0c0 1.017-.07 2.019-.203 3m-2.118 6.844A21.88 21.88 0 0015.171 17m3.839 1.132c.645-2.266.99-4.659.99-7.132A8 8 0 004.07 9m5.93 11a21.84 21.84 0 004.5-2.5" />
                                                 </svg>
                                                 <span class="mt-2 block text-xs font-semibold text-inst-800">Cargar captura de huella dactilar</span>
-                                                <span class="mt-0.5 block text-[10px] text-tx-soft">Admite exportaciones BMP y PNG generadas por Crossmatch Verifier 300.</span>
+                                                <span class="mt-0.5 block text-2xs text-tx-soft">Admite exportaciones BMP y PNG generadas por Crossmatch Verifier 300.</span>
                                             </label>
                                         </div>
 
@@ -1215,7 +1326,7 @@
                                             </div>
                                             <div class="min-w-0 text-xs">
                                                 <p class="font-bold text-slate-800 truncate" x-text="archivosSeleccionados[slotActivo]?.name"></p>
-                                                <p class="text-[10px] text-tx-soft" x-text="archivosSeleccionados[slotActivo] ? Math.round(archivosSeleccionados[slotActivo].size / 1024) + ' KB' : ''"></p>
+                                                <p class="text-2xs text-tx-soft" x-text="archivosSeleccionados[slotActivo] ? Math.round(archivosSeleccionados[slotActivo].size / 1024) + ' KB' : ''"></p>
                                             </div>
                                         </div>
                                     </div>
@@ -1224,17 +1335,17 @@
                                 <!-- ============================================== -->
                                 <!-- CONSOLA DE SINCRONIZACIÓN Y JUSTIFICACIÓN     -->
                                 <!-- ============================================== -->
-                                <div class="pt-3 border-t border-slate-200 space-y-2.5 shrink-0">
+                                <div x-show="pestanaEdicion === 'biometria'" class="pt-3 border-t border-slate-200 space-y-2.5 shrink-0">
                                     <div class="flex items-center justify-between">
                                         <span class="text-xs font-bold uppercase tracking-wider text-slate-700">Justificación Forense (Obligatoria)</span>
                                         <template x-if="archivosSeleccionados[slotActivo]">
-                                            <span class="text-[10px] text-emerald-700 font-semibold flex items-center gap-1">
+                                            <span class="text-2xs text-emerald-700 font-semibold flex items-center gap-1">
                                                 <span class="h-1.5 w-1.5 rounded-full bg-emerald-500"></span>
                                                 Archivo preparado
                                             </span>
                                         </template>
                                         <template x-if="!archivosSeleccionados[slotActivo]">
-                                            <span class="text-[10px] text-amber-700 font-medium">Sin archivo seleccionado</span>
+                                            <span class="text-2xs text-amber-700 font-medium">Sin archivo seleccionado</span>
                                         </template>
                                     </div>
 
@@ -1242,17 +1353,17 @@
                                     <div class="flex flex-wrap gap-1">
                                         <button type="button"
                                                 @click="motivosCambio[slotActivo] = 'Captura biométrica inicial en estación de credencialización.'"
-                                                class="rounded bg-slate-100 hover:bg-slate-200 px-2 py-0.5 text-[9.5px] text-slate-700 transition">
+                                                class="rounded bg-slate-100 hover:bg-slate-200 px-2 py-0.5 text-2xs text-slate-700 transition">
                                             + Captura inicial
                                         </button>
                                         <button type="button"
                                                 @click="motivosCambio[slotActivo] = 'Renovación oficial de credencial pericial LOC 139.'"
-                                                class="rounded bg-slate-100 hover:bg-slate-200 px-2 py-0.5 text-[9.5px] text-slate-700 transition">
+                                                class="rounded bg-slate-100 hover:bg-slate-200 px-2 py-0.5 text-2xs text-slate-700 transition">
                                             + Renovación oficial
                                         </button>
                                         <button type="button"
                                                 @click="motivosCambio[slotActivo] = 'Actualización por requerimiento de nitidez y calidad pericial.'"
-                                                class="rounded bg-slate-100 hover:bg-slate-200 px-2 py-0.5 text-[9.5px] text-slate-700 transition">
+                                                class="rounded bg-slate-100 hover:bg-slate-200 px-2 py-0.5 text-2xs text-slate-700 transition">
                                             + Calidad pericial
                                         </button>
                                     </div>
@@ -1264,7 +1375,7 @@
                                                placeholder="Escriba motivo de actualización (mínimo 5 caracteres)..."
                                                class="block w-full rounded border py-1.5 px-2.5 pr-14 text-xs text-slate-800 ring-1 ring-inset focus:ring-2 focus:ring-inst-600 transition"
                                                :class="(motivosCambio[slotActivo] || '').trim().length >= 5 ? 'border-emerald-300 ring-emerald-400/30' : 'border-slate-300 ring-slate-200'">
-                                        <span class="absolute right-2 top-1/2 -translate-y-1/2 text-[9px] font-mono pointer-events-none"
+                                        <span class="absolute right-2 top-1/2 -translate-y-1/2 text-2xs font-mono pointer-events-none"
                                               :class="(motivosCambio[slotActivo] || '').trim().length >= 5 ? 'text-emerald-600 font-bold' : 'text-slate-400'"
                                               x-text="((motivosCambio[slotActivo] || '').trim().length) + '/5'"></span>
                                     </div>
@@ -1310,10 +1421,57 @@
         </x-card>
     </div>
 
+    {{-- SDK oficial de Topaz (SigWeb). Sin el archivo, la captura informa "SDK no instalado" en lugar de fallar. --}}
+    @if (is_file(public_path('vendor/topaz/SigWebTablet.js')))
+        <script src="{{ asset('vendor/topaz/SigWebTablet.js') }}"></script>
+    @endif
+
     <!-- Script de Alpine.js para la Cola de Impresión -->
     <script>
         function printQueue() {
+            // URL temporal de cada archivo pendiente de guardar (fuera del estado reactivo de Alpine).
+            const urlsPendientes = new WeakMap();
             return {
+                // Miniatura de la ranura: la captura aceptada y aún no guardada tiene prioridad sobre la registrada.
+                urlPendiente(slot) {
+                    const archivo = this.archivosSeleccionados[slot];
+                    if (!archivo) return null;
+                    if (!urlsPendientes.has(archivo)) urlsPendientes.set(archivo, URL.createObjectURL(archivo));
+                    return urlsPendientes.get(archivo);
+                },
+                init() {
+                    // Una captura pertenece al elemento con el que se inició: cambiar de elemento, de canal o cerrar la página la cancela.
+                    this.$watch('elementoSeleccionadoId', (nuevo, anterior) => {
+                        if (nuevo === anterior) return;
+                        this.cancelarCapturaTopaz('Captura cancelada: cambió el elemento seleccionado.');
+                        this.descartarFirmaCapturada();
+                        this.cancelarCanon('Captura cancelada: cambió el elemento seleccionado.');
+                        this.descartarFotoCanon();
+                        this.cancelarHuella('Captura cancelada: cambió el elemento seleccionado.');
+                        this.descartarHuellaCapturada();
+                    });
+                    // Una huella pertenece al pulgar con el que se inició: cambiar de componente la cancela.
+                    this.$watch('slotActivo', (nuevo, anterior) => {
+                        if (nuevo !== anterior && this.huella?.categoria) this.cancelarHuella('Captura cancelada: cambió el componente biométrico.');
+                    });
+                    this.$watch('pestanaEdicion', (pestana) => {
+                        if (pestana === 'biometria') return;
+                        this.cancelarCanon();
+                        this.cancelarHuella('Captura cancelada: se salió de la pestaña de biometría.');
+                    });
+                    this.$watch('modoCapturaFirma', (modo) => {
+                        if (modo !== 'pad') this.cancelarCapturaTopaz();
+                    });
+                    this.$watch('modoCapturaFoto', (modo) => {
+                        if (modo !== 'canon') this.cancelarCanon();
+                    });
+                    // El agente también detiene la vista previa por inactividad si la página se cierra sin avisar.
+                    window.addEventListener('pagehide', () => {
+                        this.topaz?.liberar();
+                        this.canon?.cancelar();
+                        this.huella?.cancelar();
+                    });
+                },
                 selectedTarjeta: '',
                 numeroTarjeta: '',
                 isLoading: false,
@@ -1336,6 +1494,9 @@
                 versionPlantillaSeleccionada: 1,
                 cargandoPrevisualizacion: false,
                 previewData: null,
+                modoModal: 'vista',
+                pestanaEdicion: 'biometria',
+                miniaturas: { foto: 'cargando', firma: 'cargando', pulgar_derecho: 'cargando', pulgar_izquierdo: 'cargando' },
                 caraCredencial: 'front',
                 animandoGiro: false,
                 guardandoBiometrico: false,
@@ -1348,6 +1509,33 @@
                 // Consola de Periféricos y Slots
                 slotActivo: 'foto',
                 modoCapturaFoto: 'camara',
+                // Cámara Canon mediante el agente local (resources/js/canon-agente.js); se crea al primer uso.
+                agenteEstacionUrl: @json(config('devices.agente_estacion.url')),
+                canon: null,
+                canonEstado: 'sin_verificar',
+                canonMensaje: '',
+                canonSimulacion: false,
+                canonProcesando: false,
+                canonVistaUrl: null,
+                canonCapturaUrl: null,
+                canonCaptura: null,
+                // Ticket y elemento de la fotografía Canon preparada; el servidor verifica ambos al guardar.
+                fotoCapturaTicket: null,
+                fotoCapturaElementoId: null,
+                fotoCapturaArchivo: null,
+                // Lector Cross Match mediante el mismo agente (crearCapturaHuella); se crea al primer uso.
+                huella: null,
+                huellaEstado: 'sin_verificar',
+                huellaMensaje: '',
+                huellaSimulacion: false,
+                huellaProcesando: false,
+                huellaVistaUrl: null,
+                huellaCapturaUrl: null,
+                huellaCaptura: null,
+                // Ticket, elemento y categoría de la huella preparada; el servidor verifica los tres al guardar.
+                // Huella preparada por pulgar: { archivo, ticket, elementoId }. Cada pulgar conserva la suya hasta
+                // guardarla o descartarla; capturar un pulgar no toca la del otro.
+                huellasPreparadas: {},
                 modoCapturaFirma: 'lienzo',
                 
                 // Módulo de Cámara Web / USB
@@ -1359,8 +1547,106 @@
                 fotoCapturadaUrl: null,
 
                 // Módulo Pad Topaz / Lienzo
-                padTopazEstado: 'no_probado',
+                cambiarModoModal(modo) {
+                    this.modoModal = modo;
+                    if (modo === 'vista' && this.camaraActiva) {
+                        this.detenerCamara();
+                    }
+                },
+                // --- Tabla: estado por componente, mismo criterio que la validación 4/4 ---
+                estadoComponente(elem, slot) {
+                    const b = elem.biometricos ? elem.biometricos[slot] : null;
+                    if (!b) return 'sin_verificar';
+                    if (b.actualizado) return 'actualizado';
+                    return b.valido ? 'completo' : 'faltante';
+                },
+                claseComponente(elem, slot) {
+                    return ({
+                        completo: 'border-emerald-600/40 bg-emerald-50 text-emerald-700',
+                        faltante: 'border-dashed border-red-500 bg-red-50 text-red-700',
+                        actualizado: 'border-amber-500/70 bg-amber-50 text-amber-800',
+                        sin_verificar: 'border-dotted border-slate-300 bg-white text-slate-400',
+                    })[this.estadoComponente(elem, slot)];
+                },
+                tituloComponente(elem, slot, nombre) {
+                    const b = elem.biometricos ? elem.biometricos[slot] : null;
+                    return ({
+                        completo: nombre + ': completo',
+                        faltante: nombre + ': falta o no cumple (' + this.motivoLegible(b && b.motivo) + ')',
+                        actualizado: nombre + ': actualizado; ejecute la validación biométrica',
+                        sin_verificar: nombre + ': sin verificar (sin expediente asociado)',
+                    })[this.estadoComponente(elem, slot)];
+                },
+                resumenBiometria(elem) {
+                    const faltantes = elem.faltantes || [];
+                    if (faltantes.includes('ambito_no_resuelto')) return 'Ámbito no resuelto';
+                    if (faltantes.includes('expediente_no_localizado')) return 'Expediente no localizado';
+                    if (!elem.biometricos) return 'Sin verificar';
+                    const slots = ['foto', 'firma', 'pulgar_derecho', 'pulgar_izquierdo'];
+                    if (slots.some(s => elem.biometricos[s] && elem.biometricos[s].actualizado)) return 'Actualizado · validar';
+                    const completos = slots.filter(s => elem.biometricos[s] && elem.biometricos[s].valido).length;
+                    return completos === 4 ? 'Completa 4/4' : completos + '/4 completos';
+                },
+                claseResumenBiometria(elem) {
+                    const r = this.resumenBiometria(elem);
+                    if (r === 'Completa 4/4') return 'text-emerald-700';
+                    if (r === 'Sin verificar') return 'text-tx-soft';
+                    if (r === 'Actualizado · validar') return 'text-amber-800';
+                    return 'text-red-700';
+                },
+                motivoLegible(motivo) {
+                    if (!motivo) return 'no válido';
+                    const r = String(motivo).replace(/^(foto|firma|pulgar_derecho|pulgar_izquierdo)_?/, '');
+                    return ({ '': 'sin archivo', no_vigente: 'no vigente', categoria_incorrecta: 'categoría incorrecta', discrepancia_cuip: 'CUIP no coincide', discrepancia_ambito: 'ámbito no coincide', hash_no_verificado: 'hash no verificado' })[r] || r.replace(/_/g, ' ');
+                },
+                // --- Estación biométrica del modal ---
+                estadoSlot(slot) {
+                    const b = this.previewData && this.previewData.biometricos ? this.previewData.biometricos[slot] : null;
+                    if (!b) return 'pendiente';
+                    if (this.guardandoBiometrico && this.slotActivo === slot) return 'guardando';
+                    if (this.archivosSeleccionados[slot]) return 'preparado';
+                    if (b.actualizado) return 'actualizado';
+                    if (!b.existe) return 'pendiente';
+                    if (this.miniaturas[slot] === 'error') return 'error_carga';
+                    if (b.valido === false) return 'incompleto';
+                    return 'registrado';
+                },
+                etiquetaEstadoSlot(slot) {
+                    return ({ registrado: 'Registrado', pendiente: 'Pendiente', incompleto: 'No cumple validación', preparado: 'Archivo por guardar', guardando: 'Guardando…', actualizado: 'Actualizado', error_carga: 'Error al cargar' })[this.estadoSlot(slot)];
+                },
+                claseEstadoSlot(slot) {
+                    return ({
+                        registrado: 'bg-emerald-50 text-emerald-800 ring-emerald-600/20',
+                        pendiente: 'bg-red-50 text-red-800 ring-red-600/20',
+                        incompleto: 'bg-amber-50 text-amber-900 ring-amber-600/30',
+                        preparado: 'bg-inst-50 text-inst-800 ring-inst-600/20',
+                        guardando: 'bg-inst-50 text-inst-800 ring-inst-600/20',
+                        actualizado: 'bg-inst-50 text-inst-800 ring-inst-600/20',
+                        error_carga: 'bg-slate-100 text-slate-700 ring-slate-500/30',
+                    })[this.estadoSlot(slot)];
+                },
+                tituloEstadoSlot(slot) {
+                    const b = this.previewData && this.previewData.biometricos ? this.previewData.biometricos[slot] : null;
+                    const estado = this.estadoSlot(slot);
+                    if (estado === 'incompleto') return 'No cumple la validación: ' + this.motivoLegible(b && b.motivo);
+                    if (estado === 'error_carga') return 'El archivo está registrado, pero no se pudo cargar su vista previa.';
+                    if (estado === 'actualizado') return 'Archivo actualizado; ejecute la validación biométrica de la tarjeta.';
+                    return this.etiquetaEstadoSlot(slot);
+                },
+                componentesPendientes() {
+                    return ['foto', 'firma', 'pulgar_derecho', 'pulgar_izquierdo'].filter(slot => this.estadoSlot(slot) !== 'registrado').length;
+                },
+                etiquetaTramite(estado) {
+                    return ({ listo_impresion: 'Listo para impresión', pendiente_biometrico: 'Pendiente de biometría', apto: 'Apto', pendiente: 'Pendiente', descartado: 'Descartado' })[estado]
+                        || (estado ? String(estado).replace(/_/g, ' ') : '—');
+                },
+                topaz: null,
+                padTopazEstado: 'sin_verificar',
                 padTopazMensaje: '',
+                padTopazVersion: null,
+                padTopazProcesando: false,
+                // Elemento para el que se capturó la firma preparada (pad o lienzo); se envía al servidor para verificarlo.
+                firmaCapturaElementoId: null,
                 firmaCanvas: null,
                 firmaCtx: null,
                 firmaTrazos: 0,
@@ -1372,6 +1658,7 @@
                 modalFirmaPreview: false,
 
                 // Módulo de Huellas Dactilares
+                escalaTarjeta: 1,
                 huellaPreviewUrl: {
                     pulgar_izquierdo: null,
                     pulgar_derecho: null
@@ -1502,6 +1789,13 @@
                             this.elementos = this.elementos.map(elem => {
                                 if (detallesMap.has(elem.id)) {
                                     const det = detallesMap.get(elem.id);
+                                    const motivoDe = (slot) => {
+                                        const f = (det.faltantes || []).find(x => String(x).startsWith(slot + ':'));
+                                        return f ? String(f).split(': ').slice(1).join(': ') : null;
+                                    };
+                                    const biometricos = det.archivos
+                                        ? Object.fromEntries(Object.entries(det.archivos).map(([slot, valido]) => [slot, { valido: !!valido, motivo: valido ? null : motivoDe(slot) }]))
+                                        : null;
                                     return {
                                         ...elem,
                                         ambito_biometrico: det.ambito || elem.ambito_biometrico,
@@ -1509,6 +1803,7 @@
                                         folio: det.folio,
                                         estado_tramite: det.estado_tramite,
                                         faltantes: det.faltantes || [],
+                                        biometricos,
                                         puede_imprimir: det.biometria_valida && !!det.folio
                                     };
                                 }
@@ -1526,8 +1821,13 @@
                     }
                 },
 
-                async abrirModalPrevisualizacion(elementoId, templateVer = null) {
+                async abrirModalPrevisualizacion(elementoId, templateVer = null, modo = null) {
                     this.elementoSeleccionadoId = elementoId;
+                    if (modo) {
+                        this.modoModal = modo;
+                        this.pestanaEdicion = 'biometria';
+                    }
+                    this.miniaturas = { foto: 'cargando', firma: 'cargando', pulgar_derecho: 'cargando', pulgar_izquierdo: 'cargando' };
                     if (templateVer !== null) {
                         this.versionPlantillaSeleccionada = templateVer;
                     }
@@ -1560,6 +1860,13 @@
                         if (data.success) {
                             this.previewData = data;
                             this.cacheBuster = Date.now();
+                            // En edición se abre directamente el primer componente que requiere atención.
+                            if (this.modoModal === 'edicion') {
+                                const pendiente = ['foto', 'firma', 'pulgar_derecho', 'pulgar_izquierdo'].find(slot => this.estadoSlot(slot) !== 'registrado');
+                                if (pendiente) {
+                                    this.$nextTick(() => this.cambiarSlot(pendiente));
+                                }
+                            }
                         } else {
                             throw new Error(data.message || 'No fue posible cargar los datos de la credencial.');
                         }
@@ -1619,6 +1926,9 @@
                     if (this.slotActivo === 'foto' && slot !== 'foto' && this.camaraActiva) {
                         this.detenerCamara();
                     }
+                    if (this.slotActivo === 'foto' && slot !== 'foto') {
+                        this.cancelarCanon();
+                    }
                     this.slotActivo = slot;
                     if (slot === 'firma' && this.modoCapturaFirma === 'lienzo') {
                         this.$nextTick(() => this.iniciarCanvasFirma());
@@ -1676,26 +1986,7 @@
                     const video = document.getElementById('videoCapturaFacial');
                     if (!video || !this.camaraActiva) return;
 
-                    const canvas = document.createElement('canvas');
-                    const targetW = 600;
-                    const targetH = 800; // ratio 3:4 pericial
-                    canvas.width = targetW;
-                    canvas.height = targetH;
-                    const ctx = canvas.getContext('2d');
-
-                    const vw = video.videoWidth || 1280;
-                    const vh = video.videoHeight || 720;
-                    
-                    let cropW = vh * (3 / 4);
-                    let cropH = vh;
-                    if (cropW > vw) {
-                        cropW = vw;
-                        cropH = vw * (4 / 3);
-                    }
-                    const cropX = (vw - cropW) / 2;
-                    const cropY = (vh - cropH) / 2;
-
-                    ctx.drawImage(video, cropX, cropY, cropW, cropH, 0, 0, targetW, targetH);
+                    const canvas = this.recortarRetrato(video, video.videoWidth || 1280, video.videoHeight || 720, 600);
 
                     canvas.toBlob((blob) => {
                         if (!blob) return;
@@ -1723,6 +2014,358 @@
                     this.fotoCapturadaUrl = null;
                     this.archivosSeleccionados.foto = null;
                     this.iniciarCamara();
+                },
+
+                // Recorte central 3:4 pericial. Con anchoMaximo se escala a ese ancho; sin él se conserva la resolución nativa.
+                recortarRetrato(fuente, anchoFuente, altoFuente, anchoMaximo = null) {
+                    let cropW = altoFuente * (3 / 4);
+                    let cropH = altoFuente;
+                    if (cropW > anchoFuente) {
+                        cropW = anchoFuente;
+                        cropH = anchoFuente * (4 / 3);
+                    }
+                    const canvas = document.createElement('canvas');
+                    canvas.width = Math.round(anchoMaximo ?? cropW);
+                    canvas.height = Math.round(canvas.width * (4 / 3));
+                    canvas.getContext('2d').drawImage(fuente, (anchoFuente - cropW) / 2, (altoFuente - cropH) / 2, cropW, cropH, 0, 0, canvas.width, canvas.height);
+                    return canvas;
+                },
+
+                // ----------------------------------------------------
+                // Cámara Canon EOS mediante el agente local de la estación
+                // ----------------------------------------------------
+                capturaCanon() {
+                    if (!this.canon && typeof window.crearCapturaCanon === 'function') {
+                        this.canon = window.crearCapturaCanon({
+                            agenteUrl: this.agenteEstacionUrl,
+                            obtenerTicket: (elementoId) => this.obtenerTicketCaptura(elementoId),
+                        });
+                    }
+                    return this.canon;
+                },
+
+                sincronizarCanon(mensaje = null) {
+                    const canon = this.canon;
+                    this.canonEstado = canon ? canon.estado : 'error';
+                    this.canonMensaje = mensaje ?? (canon ? canon.mensaje : 'El módulo de captura Canon no se cargó en esta página.');
+                    this.canonSimulacion = canon?.simulacion ?? false;
+                },
+
+                estadoCanon() {
+                    const aviso = { texto: 'text-amber-800', punto: 'bg-amber-500', insignia: 'bg-amber-100 text-amber-800' };
+                    const estados = {
+                        sin_verificar: { etiqueta: 'Sin verificar', texto: 'text-tx-soft', punto: 'bg-slate-400', insignia: 'bg-slate-100 text-slate-700' },
+                        agente_no_disponible: { etiqueta: 'Agente no disponible', ...aviso },
+                        agente_no_configurado: { etiqueta: 'Agente no configurado', ...aviso },
+                        sdk_no_instalado: { etiqueta: 'SDK Canon no instalado', ...aviso },
+                        camara_desconectada: { etiqueta: 'Cámara desconectada', ...aviso },
+                        lista: { etiqueta: this.canonSimulacion ? 'Lista (simulación)' : 'Cámara lista', texto: 'text-emerald-700', punto: 'bg-emerald-500', insignia: 'bg-emerald-100 text-emerald-800' },
+                        vista_previa: { etiqueta: 'Vista previa', texto: 'text-inst-700', punto: 'bg-inst-500 animate-pulse', insignia: 'bg-blue-100 text-blue-800' },
+                        capturada: { etiqueta: 'Capturada', texto: 'text-inst-700', punto: 'bg-inst-500', insignia: 'bg-blue-100 text-blue-800' },
+                        error: { etiqueta: 'Error', texto: 'text-red-700', punto: 'bg-red-500', insignia: 'bg-red-100 text-red-800' },
+                    };
+                    return estados[this.canonEstado] ?? estados.sin_verificar;
+                },
+
+                async obtenerTicketCaptura(elementoId, categoria = null) {
+                    const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+                    const response = await fetch(`/impresion/elementos/${elementoId}/captura-ticket`, {
+                        method: 'POST',
+                        headers: { 'Accept': 'application/json', 'Content-Type': 'application/json', 'X-CSRF-TOKEN': csrfToken || '', 'X-Requested-With': 'XMLHttpRequest' },
+                        body: JSON.stringify(categoria ? { categoria } : {}),
+                    });
+                    const data = await response.json().catch(() => ({}));
+                    if (!response.ok || !data.success || !data.ticket) {
+                        const error = new Error(data.message || 'No fue posible autorizar la captura en el servidor.');
+                        error.codigo = data.codigo || 'error';
+                        throw error;
+                    }
+                    return { ticket: data.ticket };
+                },
+
+                async verificarCanon() {
+                    const canon = this.capturaCanon();
+                    if (!canon) return this.sincronizarCanon();
+                    this.canonProcesando = true;
+                    await canon.verificar();
+                    this.canonProcesando = false;
+                    this.sincronizarCanon();
+                },
+
+                async iniciarCanon() {
+                    const canon = this.capturaCanon();
+                    if (!canon) return this.sincronizarCanon();
+                    this.descartarFotoCanon();
+                    this.canonProcesando = true;
+                    try {
+                        await canon.iniciar(this.elementoSeleccionadoId);
+                        this.sincronizarCanon();
+                        canon.vigilar((blob) => {
+                            if (this.canonVistaUrl) URL.revokeObjectURL(this.canonVistaUrl);
+                            this.canonVistaUrl = URL.createObjectURL(blob);
+                        });
+                    } catch (err) {
+                        this.sincronizarCanon(err.message);
+                    } finally {
+                        this.canonProcesando = false;
+                    }
+                },
+
+                async capturarCanon() {
+                    const canon = this.canon;
+                    if (!canon) return;
+                    this.canonProcesando = true;
+                    try {
+                        const resultado = await canon.capturar();
+                        // El operador pudo cambiar de elemento mientras el agente entregaba la imagen.
+                        if (resultado.elementoId !== this.elementoSeleccionadoId) {
+                            await this.cancelarCanon('La fotografía se capturó para otro elemento y se descartó. Repita la captura.');
+                            return;
+                        }
+                        const bitmap = await createImageBitmap(resultado.blob);
+                        const canvas = this.recortarRetrato(bitmap, bitmap.width, bitmap.height);
+                        bitmap.close();
+                        // PNG: el servidor decodifica y verifica la imagen completa (su GD puede no leer JPEG).
+                        const recorte = await new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
+                        if (!recorte) throw new Error('No fue posible preparar la fotografía capturada.');
+                        this.canonCaptura = { ...resultado, blob: recorte, ancho: canvas.width, alto: canvas.height };
+                        if (this.canonCapturaUrl) URL.revokeObjectURL(this.canonCapturaUrl);
+                        this.canonCapturaUrl = URL.createObjectURL(recorte);
+                        this.sincronizarCanon();
+                    } catch (err) {
+                        this.sincronizarCanon(err.message);
+                    } finally {
+                        this.canonProcesando = false;
+                    }
+                },
+
+                async repetirCanon() {
+                    if (!this.canon) return;
+                    this.descartarFotoCanon();
+                    try {
+                        await this.canon.repetir();
+                        this.sincronizarCanon();
+                        this.canon.vigilar((blob) => {
+                            if (this.canonVistaUrl) URL.revokeObjectURL(this.canonVistaUrl);
+                            this.canonVistaUrl = URL.createObjectURL(blob);
+                        });
+                    } catch (err) {
+                        this.sincronizarCanon(err.message);
+                    }
+                },
+
+                // Devuelve true si había una sesión del agente abierta.
+                async cancelarCanon(mensaje = null) {
+                    if (!this.canon) return false;
+                    const habia = await this.canon.cancelar(mensaje);
+                    if (this.canonVistaUrl) URL.revokeObjectURL(this.canonVistaUrl);
+                    this.canonVistaUrl = null;
+                    if (this.canonCapturaUrl) URL.revokeObjectURL(this.canonCapturaUrl);
+                    this.canonCapturaUrl = null;
+                    this.canonCaptura = null;
+                    if (habia) this.sincronizarCanon(mensaje);
+                    return habia;
+                },
+
+                // Pasa la fotografía revisada al flujo de actualización existente (botón de guardar y justificación).
+                usarFotoCanon() {
+                    const captura = this.canonCaptura;
+                    if (!captura) return;
+                    if (captura.simulacion) {
+                        this.sincronizarCanon('Una imagen del modo simulación no puede guardarse en el expediente.');
+                        return;
+                    }
+                    if (captura.elementoId !== this.elementoSeleccionadoId) {
+                        this.cancelarCanon('La fotografía se capturó para otro elemento y se descartó. Repita la captura.');
+                        return;
+                    }
+                    this.fotoCapturaArchivo = new File([captura.blob], `canon_${Date.now()}.png`, { type: 'image/png' });
+                    this.archivosSeleccionados.foto = this.fotoCapturaArchivo;
+                    this.fotoCapturaTicket = captura.ticket;
+                    this.fotoCapturaElementoId = captura.elementoId;
+                    this.motivosCambio.foto = 'Fotografía facial capturada con cámara Canon EOS mediante el agente de estación.';
+                    this.sincronizarCanon('Fotografía preparada. Guárdela para registrarla en el expediente.');
+                },
+
+                // Descarta la fotografía Canon preparada (no toca la de la cámara web ni la de archivo).
+                descartarFotoCanon() {
+                    if (this.fotoCapturaArchivo && this.archivosSeleccionados.foto === this.fotoCapturaArchivo) {
+                        this.archivosSeleccionados.foto = null;
+                    }
+                    this.fotoCapturaArchivo = null;
+                    this.fotoCapturaTicket = null;
+                    this.fotoCapturaElementoId = null;
+                    if (this.canonCapturaUrl) URL.revokeObjectURL(this.canonCapturaUrl);
+                    this.canonCapturaUrl = null;
+                    this.canonCaptura = null;
+                },
+
+                // ----------------------------------------------------
+                // Lector Cross Match mediante el agente local de la estación
+                // ----------------------------------------------------
+                capturaHuella() {
+                    if (!this.huella && typeof window.crearCapturaHuella === 'function') {
+                        this.huella = window.crearCapturaHuella({
+                            agenteUrl: this.agenteEstacionUrl,
+                            obtenerTicket: (elementoId, categoria) => this.obtenerTicketCaptura(elementoId, categoria),
+                        });
+                    }
+                    return this.huella;
+                },
+
+                sincronizarHuella(mensaje = null) {
+                    const huella = this.huella;
+                    this.huellaEstado = huella ? huella.estado : 'error';
+                    this.huellaMensaje = mensaje ?? (huella ? huella.mensaje : 'El módulo de captura de huellas no se cargó en esta página.');
+                    this.huellaSimulacion = huella?.simulacion ?? false;
+                },
+
+                estadoHuella() {
+                    const aviso = { texto: 'text-amber-800', punto: 'bg-amber-500', insignia: 'bg-amber-100 text-amber-800' };
+                    const activo = { texto: 'text-inst-700', insignia: 'bg-blue-100 text-blue-800' };
+                    const estados = {
+                        sin_verificar: { etiqueta: 'Sin verificar', texto: 'text-tx-soft', punto: 'bg-slate-400', insignia: 'bg-slate-100 text-slate-700' },
+                        agente_no_disponible: { etiqueta: 'Agente no disponible', ...aviso },
+                        agente_no_configurado: { etiqueta: 'Servidor sin configurar', ...aviso },
+                        sdk_no_instalado: { etiqueta: 'SDK no instalado', ...aviso },
+                        sdk_incompatible: { etiqueta: 'SDK incompatible', ...aviso },
+                        lector_desconectado: { etiqueta: 'Lector desconectado', ...aviso },
+                        en_uso: { etiqueta: 'Lector en uso', ...aviso },
+                        error_inicializacion: { etiqueta: 'Error de inicialización', texto: 'text-red-700', punto: 'bg-red-500', insignia: 'bg-red-100 text-red-800' },
+                        lista: { etiqueta: this.huellaSimulacion ? 'Disponible (simulación)' : 'Lector disponible', texto: 'text-emerald-700', punto: 'bg-emerald-500', insignia: 'bg-emerald-100 text-emerald-800' },
+                        inicializando: { etiqueta: 'Inicializando…', punto: 'bg-inst-500 animate-pulse', ...activo },
+                        vista_previa: { etiqueta: 'Capturando', punto: 'bg-inst-500 animate-pulse', ...activo },
+                        capturada: { etiqueta: 'Huella capturada', punto: 'bg-inst-500', ...activo },
+                        cancelado: { etiqueta: 'Cancelado', texto: 'text-tx-soft', punto: 'bg-slate-400', insignia: 'bg-slate-100 text-slate-700' },
+                        error: { etiqueta: 'Error', texto: 'text-red-700', punto: 'bg-red-500', insignia: 'bg-red-100 text-red-800' },
+                    };
+                    return estados[this.huellaEstado] ?? estados.sin_verificar;
+                },
+
+                async verificarHuella() {
+                    const huella = this.capturaHuella();
+                    if (!huella) return this.sincronizarHuella();
+                    this.huellaProcesando = true;
+                    this.huellaEstado = 'inicializando';
+                    await huella.verificar();
+                    this.huellaProcesando = false;
+                    this.sincronizarHuella();
+                },
+
+                async iniciarHuella() {
+                    const huella = this.capturaHuella();
+                    if (!huella) return this.sincronizarHuella();
+                    const categoria = this.slotActivo;
+                    if (categoria !== 'pulgar_derecho' && categoria !== 'pulgar_izquierdo') return;
+                    // Recapturar reemplaza solo la huella preparada de ESTE pulgar; la del otro se conserva.
+                    this.descartarHuellaCapturada(categoria);
+                    this.huellaProcesando = true;
+                    this.huellaEstado = 'inicializando';
+                    try {
+                        await huella.iniciar(this.elementoSeleccionadoId, categoria);
+                        this.sincronizarHuella();
+                        huella.vigilar((blob) => {
+                            if (this.huellaVistaUrl) URL.revokeObjectURL(this.huellaVistaUrl);
+                            this.huellaVistaUrl = URL.createObjectURL(blob);
+                        });
+                    } catch (err) {
+                        this.sincronizarHuella(err.message);
+                    } finally {
+                        this.huellaProcesando = false;
+                    }
+                },
+
+                async capturarHuella() {
+                    const huella = this.huella;
+                    if (!huella) return;
+                    this.huellaProcesando = true;
+                    try {
+                        const resultado = await huella.capturar();
+                        // El operador pudo cambiar de elemento o de pulgar mientras el lector entregaba la imagen.
+                        if (resultado.elementoId !== this.elementoSeleccionadoId || resultado.categoria !== this.slotActivo) {
+                            await this.cancelarHuella('La huella se capturó para otro elemento o pulgar y se descartó. Repita la captura.');
+                            return;
+                        }
+                        this.huellaCaptura = resultado;
+                        if (this.huellaCapturaUrl) URL.revokeObjectURL(this.huellaCapturaUrl);
+                        this.huellaCapturaUrl = URL.createObjectURL(resultado.blob);
+                        this.sincronizarHuella();
+                    } catch (err) {
+                        this.sincronizarHuella(err.message);
+                    } finally {
+                        this.huellaProcesando = false;
+                    }
+                },
+
+                async repetirHuella() {
+                    if (!this.huella) return;
+                    if (this.huellaCapturaUrl) URL.revokeObjectURL(this.huellaCapturaUrl);
+                    this.huellaCapturaUrl = null;
+                    this.huellaCaptura = null;
+                    try {
+                        await this.huella.repetir();
+                        this.sincronizarHuella();
+                        this.huella.vigilar((blob) => {
+                            if (this.huellaVistaUrl) URL.revokeObjectURL(this.huellaVistaUrl);
+                            this.huellaVistaUrl = URL.createObjectURL(blob);
+                        });
+                    } catch (err) {
+                        this.sincronizarHuella(err.message);
+                    }
+                },
+
+                // Devuelve true si había una sesión del lector abierta (el agente libera el lector al cerrarla).
+                async cancelarHuella(mensaje = null) {
+                    if (!this.huella) return false;
+                    const habia = await this.huella.cancelar(mensaje);
+                    if (this.huellaVistaUrl) URL.revokeObjectURL(this.huellaVistaUrl);
+                    this.huellaVistaUrl = null;
+                    if (this.huellaCapturaUrl) URL.revokeObjectURL(this.huellaCapturaUrl);
+                    this.huellaCapturaUrl = null;
+                    this.huellaCaptura = null;
+                    if (habia) this.sincronizarHuella(mensaje);
+                    return habia;
+                },
+
+                // Pasa la huella revisada al flujo de actualización existente (botón de guardar y justificación).
+                usarHuella() {
+                    const captura = this.huellaCaptura;
+                    if (!captura) return;
+                    if (captura.simulacion) {
+                        this.sincronizarHuella('Una imagen del modo simulación no puede guardarse en el expediente.');
+                        return;
+                    }
+                    if (captura.elementoId !== this.elementoSeleccionadoId || captura.categoria !== this.slotActivo) {
+                        this.cancelarHuella('La huella se capturó para otro elemento o pulgar y se descartó. Repita la captura.');
+                        return;
+                    }
+                    const categoria = captura.categoria;
+                    const archivo = new File([captura.blob], `crossmatch_${categoria}_${Date.now()}.png`, { type: 'image/png' });
+                    this.archivosSeleccionados[categoria] = archivo;
+                    if (this.huellaPreviewUrl[categoria]) URL.revokeObjectURL(this.huellaPreviewUrl[categoria]);
+                    this.huellaPreviewUrl[categoria] = URL.createObjectURL(captura.blob);
+                    this.huellasPreparadas = { ...this.huellasPreparadas, [categoria]: { archivo, ticket: captura.ticket, elementoId: captura.elementoId } };
+                    this.motivosCambio[categoria] = `Captura dactilar de ${categoria === 'pulgar_derecho' ? 'pulgar derecho' : 'pulgar izquierdo'} con lector Cross Match Verifier 300 LC 2.0 mediante el agente de estación.`;
+                    this.sincronizarHuella('Huella preparada. Guárdela para registrarla en el expediente.');
+                },
+
+                // Descarta la huella del lector preparada de un pulgar, o de ambos si no se indica
+                // (no toca un archivo importado manualmente).
+                descartarHuellaCapturada(categoria = null) {
+                    const restantes = { ...this.huellasPreparadas };
+                    for (const c of categoria ? [categoria] : Object.keys(restantes)) {
+                        const preparada = restantes[c];
+                        if (preparada && this.archivosSeleccionados[c] === preparada.archivo) {
+                            this.archivosSeleccionados[c] = null;
+                            if (this.huellaPreviewUrl[c]) URL.revokeObjectURL(this.huellaPreviewUrl[c]);
+                            this.huellaPreviewUrl[c] = null;
+                        }
+                        delete restantes[c];
+                    }
+                    this.huellasPreparadas = restantes;
+                    if (this.huellaCapturaUrl) URL.revokeObjectURL(this.huellaCapturaUrl);
+                    this.huellaCapturaUrl = null;
+                    this.huellaCaptura = null;
                 },
 
                 // ----------------------------------------------------
@@ -1798,6 +2441,7 @@
                 },
 
                 styleCardElement(el) {
+                    // Igual que la vista térmica: geometría en %, tipografía heredada por el span.
                     return {
                         left: el.x + '%',
                         top: el.y + '%',
@@ -1805,46 +2449,44 @@
                         height: el.height + '%',
                         zIndex: (el.kind === 'image' ? 10 : 20),
                         border: el.border || 'none',
-                        boxSizing: 'border-box'
+                        boxSizing: 'border-box',
+                        fontWeight: el.weight || 400,
+                        color: el.color || '#111827',
+                        textAlign: el.align || 'center',
+                        lineHeight: el.line_height || 1,
                     };
                 },
 
                 styleSpanText(el) {
-                    const rotation = el.rotation || 0;
-                    const isRotated = (rotation !== 0);
+                    const rotation = Number(el.rotation || 0);
                     const width = parseFloat(el.width) || 1;
                     const height = parseFloat(el.height) || 1;
-                    const spanWidth = isRotated ? ((height / width) * 100).toFixed(2) + '%' : '100%';
-                    const spanHeight = isRotated ? ((width / height) * 100).toFixed(2) + '%' : '100%';
-                    const spanTransform = 'translate(-50%, -50%)' + (isRotated ? ` rotate(${rotation}deg)` : '');
-
-                    let fs = el.font_size ? (el.font_size * 1.05) : 7;
-                    if (fs < 5.5) fs = 5.5;
-
+                    const isRotated = rotation !== 0;
                     const isCode = (el.field === 'folio' || el.field === 'cuip');
-                    const defaultFont = isCode ? 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace' : 'Arial, Inter, sans-serif';
+                    const aspect = Number(this.previewData.template.height_mm) / Number(this.previewData.template.width_mm);
 
                     return {
-                        position: 'absolute',
-                        top: '50%',
-                        left: '50%',
-                        width: spanWidth,
-                        height: spanHeight,
-                        transform: spanTransform,
+                        width: isRotated ? ((height / width) * aspect * 100).toFixed(2) + '%' : '100%',
+                        height: isRotated ? ((width / height) / aspect * 100).toFixed(2) + '%' : '100%',
+                        transform: 'translate(-50%, -50%)' + (isRotated ? ` rotate(${rotation}deg)` : ''),
+                        fontFamily: el.font_family || (isCode ? 'monospace' : 'Inter, sans-serif'),
+                        fontSize: el.font_size + 'pt',
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: el.align === 'left' ? 'flex-start' : (el.align === 'right' ? 'flex-end' : 'center'),
-                        textAlign: el.align || 'center',
-                        fontSize: fs.toFixed(1) + 'px',
-                        fontFamily: el.font_family || defaultFont,
-                        fontWeight: el.weight || 400,
-                        color: el.color || '#111827',
-                        whiteSpace: (isCode && !el.font_family) ? 'nowrap' : 'pre-line',
-                        overflowWrap: (isCode && !el.font_family) ? 'normal' : 'anywhere',
-                        wordBreak: (isCode && !el.font_family) ? 'normal' : 'break-word',
-                        lineHeight: el.line_height || 1.1,
-                        pointerEvents: 'none'
+                        whiteSpace: isCode ? 'nowrap' : 'pre-line',
                     };
+                },
+
+                // Escala el lienzo físico al visor y aplica el mismo ajuste de texto que la impresión.
+                ajustarTarjeta() {
+                    const canvas = document.querySelector('[data-card-canvas]');
+                    const visor = canvas?.parentElement;
+                    if (!canvas || !visor || !canvas.offsetWidth || !visor.clientWidth) return;
+                    this.escalaTarjeta = visor.clientWidth / canvas.offsetWidth;
+                    canvas.querySelectorAll('.credential-print-element').forEach((el) => {
+                        window.fitCredentialText?.(el, el.dataset.fontSize);
+                    });
                 },
 
                 limpiarFirmaCanvas() {
@@ -1872,6 +2514,7 @@
                     this.firmaCanvas.toBlob((blob) => {
                         if (!blob) return;
                         this.firmaCapturadaBlob = blob;
+                        this.firmaCapturaElementoId = this.elementoSeleccionadoId;
                         if (this.firmaCapturadaUrl) {
                             URL.revokeObjectURL(this.firmaCapturadaUrl);
                         }
@@ -1894,83 +2537,151 @@
                 },
 
                 descartarFirmaPreview() {
-                    this.modalFirmaPreview = false;
+                    this.descartarFirmaCapturada();
                     this.limpiarFirmaCanvas();
                 },
 
-                async verificarSigWeb() {
-                    this.padTopazEstado = 'capturando';
-                    this.padTopazMensaje = 'Sondeando servicio local SigWeb en localhost:47289...';
-                    const controller = new AbortController();
-                    const timeoutId = setTimeout(() => controller.abort(), 2000);
+                // Descarta la firma preparada sin depender de que el lienzo táctil exista (la del pad no lo usa).
+                descartarFirmaCapturada() {
+                    this.liberarPreviewFirmaArchivo();
+                    if (this.firmaCapturadaUrl) URL.revokeObjectURL(this.firmaCapturadaUrl);
+                    this.firmaCapturadaUrl = null;
+                    this.firmaCapturadaBlob = null;
+                    this.modalFirmaPreview = false;
+                    this.archivosSeleccionados.firma = null;
+                    this.firmaCapturaElementoId = null;
+                },
 
+                abrirPreviewFirma() {
+                    this.liberarPreviewFirmaArchivo();
+                    if (this.firmaCapturadaUrl) {
+                        this.firmaTempPreviewUrl = this.firmaCapturadaUrl;
+                    } else if (this.archivosSeleccionados.firma) {
+                        this.firmaTempPreviewUrl = URL.createObjectURL(this.archivosSeleccionados.firma);
+                    }
+                    this.modalFirmaPreview = true;
+                },
+
+                // Libera solo la URL creada para un archivo; la de la captura tiene su propio ciclo de vida.
+                liberarPreviewFirmaArchivo() {
+                    if (this.firmaTempPreviewUrl && this.firmaTempPreviewUrl !== this.firmaCapturadaUrl) {
+                        URL.revokeObjectURL(this.firmaTempPreviewUrl);
+                    }
+                    this.firmaTempPreviewUrl = null;
+                },
+
+                // Reduce fotografías de cámara réflex (varios MB) antes de subirlas; las huellas y firmas no se recomprimen.
+                async redimensionarFoto(file, ladoMaximo = 1600, calidad = 0.92) {
+                    const bitmap = await createImageBitmap(file);
+                    const escala = Math.min(1, ladoMaximo / Math.max(bitmap.width, bitmap.height));
+                    const canvas = document.createElement('canvas');
+                    canvas.width = Math.round(bitmap.width * escala);
+                    canvas.height = Math.round(bitmap.height * escala);
+                    canvas.getContext('2d').drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+                    bitmap.close();
+                    const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', calidad));
+                    if (!blob) throw new Error('No fue posible preparar la fotografía.');
+                    return new File([blob], file.name.replace(/\.[^.]+$/, '') + '_preparada.jpg', { type: 'image/jpeg' });
+                },
+
+                // Adaptador del SDK oficial (resources/js/topaz-signature.js); se crea al primer uso.
+                padTopaz() {
+                    if (!this.topaz && typeof window.crearCapturaTopaz === 'function') {
+                        this.topaz = window.crearCapturaTopaz();
+                    }
+                    return this.topaz;
+                },
+
+                sincronizarEstadoTopaz(mensaje = null) {
+                    const topaz = this.topaz;
+                    this.padTopazEstado = topaz ? topaz.estado : 'error';
+                    this.padTopazMensaje = mensaje ?? (topaz ? topaz.mensaje : 'El módulo de captura Topaz no se cargó en esta página.');
+                    this.padTopazVersion = topaz?.version ?? null;
+                },
+
+                estadoPadTopaz() {
+                    const estados = {
+                        sin_verificar: { etiqueta: 'Sin verificar', texto: 'text-tx-soft', punto: 'bg-slate-400', insignia: 'bg-slate-100 text-slate-700' },
+                        sdk_ausente: { etiqueta: 'SDK no instalado', texto: 'text-amber-800', punto: 'bg-amber-500', insignia: 'bg-amber-100 text-amber-800' },
+                        sdk_incompatible: { etiqueta: 'SDK incompatible', texto: 'text-amber-800', punto: 'bg-amber-500', insignia: 'bg-amber-100 text-amber-800' },
+                        servicio_no_disponible: { etiqueta: 'SigWeb no disponible', texto: 'text-amber-800', punto: 'bg-amber-500', insignia: 'bg-amber-100 text-amber-800' },
+                        pad_no_conectado: { etiqueta: 'Pad no conectado', texto: 'text-amber-800', punto: 'bg-amber-500', insignia: 'bg-amber-100 text-amber-800' },
+                        listo: { etiqueta: 'Pad listo', texto: 'text-emerald-700', punto: 'bg-emerald-500', insignia: 'bg-emerald-100 text-emerald-800' },
+                        capturando: { etiqueta: 'Capturando…', texto: 'text-inst-700', punto: 'bg-inst-500 animate-pulse', insignia: 'bg-blue-100 text-blue-800' },
+                        error: { etiqueta: 'Error', texto: 'text-red-700', punto: 'bg-red-500', insignia: 'bg-red-100 text-red-800' },
+                    };
+                    return estados[this.padTopazEstado] ?? estados.sin_verificar;
+                },
+
+                verificarSigWeb() {
+                    const topaz = this.padTopaz();
+                    topaz?.verificar();
+                    this.sincronizarEstadoTopaz();
+                },
+
+                iniciarCapturaTopaz() {
+                    const topaz = this.padTopaz();
+                    if (!topaz) {
+                        this.sincronizarEstadoTopaz();
+                        return;
+                    }
+                    this.descartarFirmaCapturada();
+                    const canvas = document.getElementById('canvasTopazFirma');
+                    canvas?.getContext('2d')?.clearRect(0, 0, canvas.width, canvas.height);
                     try {
-                        const response = await fetch('http://localhost:47289/SigWeb/TabletState', {
-                            signal: controller.signal
-                        }).catch(() => null);
-
-                        clearTimeout(timeoutId);
-
-                        if (response && response.ok) {
-                            this.padTopazEstado = 'conectado';
-                            this.padTopazMensaje = 'Servicio Topaz SigWeb detectado y disponible en esta estación.';
-                        } else {
-                            this.padTopazEstado = 'no_detectado';
-                            this.padTopazMensaje = 'Servicio Topaz SigWeb no detectado en localhost:47289. Utilice el lienzo táctil integrado.';
-                        }
-                    } catch (_) {
-                        clearTimeout(timeoutId);
-                        this.padTopazEstado = 'no_detectado';
-                        this.padTopazMensaje = 'Servicio Topaz SigWeb no detectado. Utilice el lienzo táctil integrado.';
+                        topaz.iniciar(this.elementoSeleccionadoId, canvas);
+                        this.sincronizarEstadoTopaz();
+                    } catch (err) {
+                        this.sincronizarEstadoTopaz(err.message);
+                        this.mostrarToast('error', err.message);
                     }
                 },
 
-                async activarPadTopaz() {
-                    this.padTopazEstado = 'capturando';
-                    this.padTopazMensaje = 'Iniciando captura en pad Topaz SigLite...';
-                    try {
-                        const res = await fetch('http://localhost:47289/SigWeb/TabletState/1', { method: 'POST' }).catch(() => null);
-                        if (!res || !res.ok) {
-                            throw new Error('El servicio SigWeb no respondió en localhost:47289. Por favor inicie el servicio o use el lienzo táctil.');
-                        }
+                limpiarCapturaTopaz() {
+                    this.topaz?.limpiar(document.getElementById('canvasTopazFirma'));
+                },
 
-                        this.padTopazMensaje = 'Pad activo. Firme en el dispositivo Topaz...';
-                        await new Promise(r => setTimeout(r, 1500));
-                        const imgRes = await fetch('http://localhost:47289/SigWeb/SignatureImage').catch(() => null);
-                        if (imgRes && imgRes.ok) {
-                            const b64 = await imgRes.text();
-                            if (b64 && b64.length > 50) {
-                                const byteCharacters = atob(b64.replace(/^data:image\/\w+;base64,/, ''));
-                                const byteNumbers = new Array(byteCharacters.length);
-                                for (let i = 0; i < byteCharacters.length; i++) {
-                                    byteNumbers[i] = byteCharacters.charCodeAt(i);
-                                }
-                                const byteArray = new Uint8Array(byteNumbers);
-                                const blob = new Blob([byteArray], { type: 'image/png' });
-                                
-                                this.firmaCapturadaBlob = blob;
-                                if (this.firmaCapturadaUrl) {
-                                    URL.revokeObjectURL(this.firmaCapturadaUrl);
-                                }
-                                this.firmaCapturadaUrl = URL.createObjectURL(blob);
-                                this.firmaTempPreviewUrl = this.firmaCapturadaUrl;
-                                this.modalFirmaPreview = true;
-                                this.padTopazEstado = 'conectado';
-                                this.padTopazMensaje = 'Firma recuperada desde pad Topaz. Valide la previsualización.';
-                                this.exitoModal = 'Firma Topaz obtenida exitosamente.';
-                                this.mostrarToast('exito', 'Firma obtenida desde pad Topaz. Valide la previsualización.');
-                                return;
-                            }
+                // Devuelve true si había una captura activa que se canceló.
+                cancelarCapturaTopaz(mensaje = null) {
+                    if (!this.topaz?.cancelar()) return false;
+                    const canvas = document.getElementById('canvasTopazFirma');
+                    canvas?.getContext('2d')?.clearRect(0, 0, canvas.width, canvas.height);
+                    this.sincronizarEstadoTopaz(mensaje);
+                    return true;
+                },
+
+                async aceptarCapturaTopaz() {
+                    const topaz = this.topaz;
+                    if (!topaz || this.padTopazProcesando) return;
+                    this.padTopazProcesando = true;
+                    try {
+                        const { blob, elementoId, puntos } = await topaz.aceptar();
+                        // El operador pudo cambiar de elemento mientras SigWeb entregaba la imagen.
+                        if (elementoId !== this.elementoSeleccionadoId) {
+                            throw new Error('La firma se capturó para otro elemento y se descartó. Repita la captura.');
                         }
-                        throw new Error('No se detectó firma en el pad Topaz.');
+                        this.firmaCapturadaBlob = blob;
+                        this.firmaCapturadaUrl = URL.createObjectURL(blob);
+                        this.firmaTempPreviewUrl = this.firmaCapturadaUrl;
+                        this.firmaCapturaElementoId = elementoId;
+                        this.motivosCambio.firma = 'Firma capturada en pad Topaz SigLite LCD 1x5 mediante SigWeb.';
+                        this.modalFirmaPreview = true;
+                        this.sincronizarEstadoTopaz(`Firma obtenida del pad (${puntos} puntos). Revísela y acéptela; todavía no se ha guardado.`);
                     } catch (err) {
-                        this.padTopazEstado = 'no_detectado';
-                        this.padTopazMensaje = err.message;
-                        this.errorModal = err.message;
+                        this.sincronizarEstadoTopaz(err.message);
+                        this.mostrarToast('error', err.message);
+                    } finally {
+                        this.padTopazProcesando = false;
                     }
                 },
 
                 cerrarModalPrevisualizacion() {
+                    this.cancelarCapturaTopaz();
+                    this.firmaCapturaElementoId = null;
+                    this.cancelarCanon();
+                    this.descartarFotoCanon();
+                    this.cancelarHuella();
+                    this.descartarHuellaCapturada();
                     this.detenerCamara();
                     if (this.fotoCapturadaUrl) URL.revokeObjectURL(this.fotoCapturadaUrl);
                     if (this.firmaCapturadaUrl) URL.revokeObjectURL(this.firmaCapturadaUrl);
@@ -1998,9 +2709,19 @@
                     this.motivosCambio = { foto: '', firma: '', pulgar_derecho: '', pulgar_izquierdo: '' };
                 },
 
-                seleccionarArchivoBiometrico(categoria, event) {
-                    const file = event.target.files[0];
+                async seleccionarArchivoBiometrico(categoria, event) {
+                    let file = event.target.files[0];
                     if (!file) return;
+
+                    if (categoria === 'foto' && file.size > 2 * 1024 * 1024) {
+                        try {
+                            file = await this.redimensionarFoto(file);
+                        } catch (err) {
+                            this.errorModal = err.message || 'No fue posible preparar la fotografía.';
+                            event.target.value = '';
+                            return;
+                        }
+                    }
 
                     if (file.size > 2 * 1024 * 1024) {
                         this.errorModal = 'El archivo seleccionado excede el tamaño máximo permitido de 2 MB.';
@@ -2051,10 +2772,30 @@
                     this.errorModal = '';
                     this.exitoModal = '';
 
+                    // Una captura (pad, lienzo o Canon) solo se guarda en el elemento para el que se hizo; el servidor lo vuelve a comprobar.
+                    const esFotoCanon = categoria === 'foto' && this.fotoCapturaTicket !== null && file === this.fotoCapturaArchivo;
+                    const huellaPreparada = this.huellasPreparadas[categoria] ?? null;
+                    const esHuellaAgente = huellaPreparada !== null && file === huellaPreparada.archivo;
+                    const ticketAgente = esFotoCanon ? this.fotoCapturaTicket : (esHuellaAgente ? huellaPreparada.ticket : null);
+                    const elementoCaptura = categoria === 'firma' ? this.firmaCapturaElementoId
+                        : (esFotoCanon ? this.fotoCapturaElementoId : (esHuellaAgente ? huellaPreparada.elementoId : null));
+                    if (elementoCaptura !== null && elementoCaptura !== this.elementoSeleccionadoId) {
+                        if (categoria === 'firma') this.descartarFirmaCapturada(); else if (esHuellaAgente) this.descartarHuellaCapturada(categoria); else this.descartarFotoCanon();
+                        this.errorModal = 'La captura se hizo para otro elemento y se descartó. Repítala con el elemento seleccionado.';
+                        this.mostrarToast('error', this.errorModal);
+                        return;
+                    }
+
                     const formData = new FormData();
                     formData.append('tipo_biometrico', categoria);
                     formData.append('archivo', file);
                     formData.append('motivo_cambio', motivo);
+                    if (elementoCaptura !== null) {
+                        formData.append('elemento_captura_id', elementoCaptura);
+                    }
+                    if (ticketAgente !== null) {
+                        formData.append('captura_ticket', ticketAgente);
+                    }
 
                     const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
 
@@ -2084,6 +2825,8 @@
                             this.previewData.biometricos[categoria].url = data.stream_url;
                             this.previewData.biometricos[categoria].sha256 = data.sha256;
                             this.previewData.biometricos[categoria].version = data.version;
+                            this.previewData.biometricos[categoria].actualizado = true;
+                            this.miniaturas[categoria] = 'cargando';
                             this.previewData.semaforo.es_completo = data.es_completo;
                             this.previewData.semaforo.completos = data.total_biometricos;
                             this.previewData.elemento.estado_tramite = data.estado_tramite;
@@ -2093,11 +2836,22 @@
                         // Limpiar archivo seleccionado y justificación
                         this.archivosSeleccionados[categoria] = null;
                         this.motivosCambio[categoria] = '';
+                        if (categoria === 'firma') this.firmaCapturaElementoId = null;
+                        if (esFotoCanon) {
+                            this.descartarFotoCanon();
+                            this.cancelarCanon('Fotografía guardada en el expediente; sesión de cámara cerrada.');
+                        }
+                        if (esHuellaAgente) {
+                            // Solo la del pulgar guardado: la del otro pulgar sigue pendiente de guardar.
+                            this.descartarHuellaCapturada(categoria);
+                            this.cancelarHuella('Huella guardada en el expediente; lector liberado.');
+                        }
 
                         // Sincronizar en la lista de elementos de la cola de impresión
                         const elemEnTabla = this.elementos.find(e => e.id === this.elementoSeleccionadoId);
                         if (elemEnTabla) {
                             elemEnTabla.biometria_valida = data.es_completo;
+                            elemEnTabla.biometricos = { ...(elemEnTabla.biometricos || {}), [categoria]: { valido: false, motivo: null, actualizado: true } };
                             elemEnTabla.estado_tramite = data.estado_tramite;
                             elemEnTabla.puede_imprimir = data.es_completo && !!elemEnTabla.folio;
                         }
