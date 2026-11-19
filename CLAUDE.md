@@ -1,89 +1,68 @@
+# Sistema Estatal LOC 139 — Instrucciones del proyecto
 
-# CLAUDE.md — Sistema Estatal LOC 139
+Complementa las instrucciones globales (`~/.claude/CLAUDE.md`); aquí solo lo específico del proyecto.
 
-## 1. Contexto del proyecto
+## 1. Contexto y stack
 
-Sistema Estatal para la Gestión y Control de Credenciales de Portación de Armas de Fuego del Personal Autorizado en la Licencia Oficial Colectiva No. 139.
+- Aplicación Laravel para gestión y control de credenciales del personal autorizado de la Licencia Oficial Colectiva No. 139. Respeta el propósito institucional y los procesos de negocio existentes.
+- Stack verificado (2026-11): PHP 8.4, Laravel 13.x, PHPUnit 12 (no Pest), Laravel Pint, MySQL en local; las pruebas usan sqlite en memoria según `phpunit.xml`. Ante cambios mayores, reconfirma versiones en `composer.json` y la configuración.
+- Existe una sub-aplicación anidada en `loc-importador/` con sus propios modelos y servicios; no la confundas con la aplicación principal.
+- No supongas cómo funciona un proceso por el nombre de una clase, tabla o pantalla: verifica la implementación. El código vigente prevalece sobre la documentación.
 
-Aplicación desarrollada con Laravel.
+## 2. Investigación previa
 
-Antes de realizar cambios, verifica las versiones reales de PHP, Laravel, dependencias y base de datos mediante los archivos de configuración y comandos existentes. No presupongas que la documentación está actualizada.
+Antes de modificar un comportamiento:
 
-## 2. Principios de desarrollo
+1. Identifica rutas, controladores, modelos, servicios, vistas y pruebas involucrados, y sigue el flujo desde la entrada hasta la persistencia o respuesta.
+2. Revisa implementaciones similares para reutilizar los patrones del proyecto.
+3. Comprueba relaciones, permisos y efectos secundarios, y las pruebas que protegen el comportamiento.
+4. Si el cambio afecta varias áreas, define primero un plan breve con los archivos probables.
 
-- Priorizar soluciones simples, mantenibles y funcionales.
-- Reutilizar código, componentes, servicios y lógica existentes.
-- No duplicar funcionalidades.
-- No introducir dependencias sin justificar su necesidad.
-- No crear abstracciones especulativas.
-- Realizar cambios pequeños y enfocados.
-- Respetar la arquitectura y convenciones existentes.
-- No reconstruir módulos que ya funcionan.
+## 3. Seguridad y datos sensibles
 
-## 3. Antes de modificar código
+- Respeta autenticación, autorización, roles y permisos existentes; valida siempre en el servidor, no solo en la interfaz.
+- No expongas información sensible en vistas, respuestas, errores, logs, reportes ni pruebas.
+- No muestres ni copies valores de `.env`; comprueba la existencia de variables sin revelar su valor.
+- No utilices datos personales reales en pruebas, seeders, ejemplos ni demostraciones. Los archivos bajo `Gestion de informacion/` y `evidencias/` contienen o contuvieron datos reales: no los leas ni los repliques salvo instrucción expresa.
+- No consultes ni modifiques datos operativos reales sin autorización expresa y procedimiento seguro.
+- No debilites controles de seguridad para facilitar una prueba o resolver un error.
 
-1. Investigar cómo funciona actualmente la funcionalidad.
-2. Identificar rutas, controladores, modelos, servicios, vistas y pruebas involucradas.
-3. Revisar implementaciones similares existentes.
-4. Identificar dependencias y posibles efectos secundarios.
-5. Proponer un plan cuando el cambio afecte varios componentes.
+## 4. Base de datos y migraciones
 
-No modificar archivos únicamente porque parezcan innecesarios sin comprobar sus referencias.
+- Inspecciona migraciones, relaciones, claves e índices antes de cambiar el esquema; comprueba compatibilidad con MySQL y el impacto sobre datos y módulos que consumen las tablas.
+- Usa transacciones cuando varias escrituras deban mantenerse consistentes.
+- No ejecutes `migrate:fresh`, `db:wipe`, seeders que alteren datos operativos, ni migraciones en entornos compartidos sin autorización explícita.
+- Antes de proponer una migración, explica su impacto y requisitos de respaldo o despliegue.
 
-## 4. Seguridad e integridad
+## 5. Pruebas y verificación
 
-- Respetar autenticación, autorización, roles y permisos.
-- Validar datos de entrada en el servidor.
-- No exponer información sensible en respuestas, registros o pruebas.
-- No leer ni mostrar secretos de archivos .env.
-- No utilizar información personal real en pruebas.
-- No modificar datos operativos reales.
-- No ejecutar operaciones destructivas sobre bases de datos.
+- Ejecuta primero las pruebas específicas del área afectada (`php artisan test --filter=...`); amplía a la suite cuando el alcance o riesgo lo justifique.
+- Para cambios de interfaz valida interacciones y estados relevantes; usa Playwright cuando sea necesario.
+- Si no existen pruebas adecuadas, indícalo y ejecuta otras verificaciones disponibles.
+- No modifiques pruebas para hacer pasar una implementación incorrecta.
 
-## 5. Base de datos
+## 6. Git — protección específica
 
-- Inspeccionar las migraciones y relaciones existentes antes de modificar el esquema.
-- Evitar cambios incompatibles con datos existentes.
-- Respetar las restricciones y relaciones actuales.
-- Utilizar transacciones cuando una operación modifique múltiples registros relacionados.
-- No ejecutar migrate:fresh, db:wipe o seeders sobre bases de datos operativas.
+- Además de las reglas globales: este repositorio suele tener trabajo local sin confirmar, incluidas eliminaciones preparadas en staging. Respétalo, no lo descartes ni lo "limpies", y no elimines archivos sin autorización explícita.
 
-## 6. Pruebas y verificación
+## 7. Uso condicional de Graphify
 
-- Identificar las pruebas pertinentes antes de modificar código.
-- Ejecutar primero las pruebas específicas del módulo afectado.
-- Ejecutar pruebas adicionales cuando el alcance lo justifique.
-- No afirmar que algo funciona si no se ha verificado.
-- Informar claramente las pruebas ejecutadas y sus resultados.
+Graphify es una ayuda de navegación, no un requisito. No lo instales ni detengas una tarea por su ausencia.
 
-## 7. Gestión de cambios
+- Los hooks del proyecto ya sugieren el grafo automáticamente; síguelos cuando aparezcan.
+- Si el comando `graphify` y `graphify-out/graph.json` están disponibles, para preguntas de arquitectura o relaciones usa primero `graphify query "<pregunta>"`, `graphify path "A" "B"` o `graphify explain "X"` antes de búsquedas indiscriminadas o lecturas extensas. Contrasta siempre sus resultados con el código real: el grafo puede estar desactualizado.
+- Si existe `graphify-out/wiki/`, puedes usarla para navegación amplia; actualmente no está generada. Consulta `graphify-out/GRAPH_REPORT.md` solo para revisiones arquitectónicas amplias.
+- No ejecutes `graphify update .` por iniciativa propia: reescribe archivos trackeados bajo `graphify-out/`. Si una modificación requiere actualizar el grafo, solicita autorización antes; nunca mezcles esos archivos en commits funcionales sin avisar.
+- No leas `graphify-out/graph.json` directamente (3+ MB); usa los subcomandos.
+- Si Graphify falla, informa el problema y continúa con exploración convencional. Los subagentes que exploren código deben respetar esta misma política.
 
-- Revisar git status antes de modificar archivos.
-- No sobrescribir cambios existentes del usuario.
-- No realizar commits, push, reset o eliminación de archivos sin autorización.
-- Presentar un resumen de archivos modificados y motivos.
+## 8. Delegación y archivos a evitar
 
-## 8. Respuestas
+- Exploración amplia: `graphify query` primero; si no basta, un solo explorador (Explore nativo o `codebase-explorer`). Revisión: un solo revisor por tarea (`code-reviewer` del proyecto). Verificación de pruebas: `test-verifier`.
+- No leas ni proceses volcados masivos generados salvo petición expresa: salidas de Repomix (`repomix-output.xml` en este directorio o en el padre), `../Sistema2.xml` u otros exports similares.
 
-Utilizar respuestas concretas y técnicas.
+## 9. Alcance y comunicación
 
-Evitar explicaciones extensas cuando una respuesta breve sea suficiente.
-
-Distinguir entre:
-- Hechos comprobados.
-- Hipótesis.
-- Recomendaciones.
-- Problemas pendientes.
-
-No mostrar archivos completos si basta con presentar el fragmento relevante.
-
-## graphify
-
-This project has a knowledge graph at graphify-out/ with god nodes, community structure, and cross-file relationships.
-
-Rules:
-- When graphify-out/graph.json exists, run `graphify query "<question>"` before your first grep, search or source-file read for a codebase question, and put this rule in every subagent prompt that explores code. Read raw files only for lines the graph or an earlier read already located. Use `graphify path "<A>" "<B>"` for relationships and `graphify explain "<concept>"` for focused concepts. These return a scoped subgraph, usually much smaller than GRAPH_REPORT.md or raw grep output.
-- If graphify-out/wiki/index.md exists, use it for broad navigation instead of raw source browsing.
-- Read graphify-out/GRAPH_REPORT.md only for broad architecture review or when query/path/explain do not surface enough context.
-- After modifying code, run `graphify update .` to keep the graph current (AST-only, no API cost).
-- A committed graphify-out/graph.json is rewritten whole on every build, so a large diff to it in a pull request is expected. Do not flag it as churn or suggest skipping the graph rebuild or its hooks.
+- Cambios que afecten varios componentes, permisos, datos o procesos institucionales: explica brevemente el enfoque antes de implementar.
+- Si el requerimiento contradice el comportamiento actual y puede afectar datos, permisos o procesos, detente y explica la diferencia.
+- Ante conflicto entre instrucciones, prevalecen las restricciones de seguridad y protección de datos; pide aclaración si el conflicto afecta el alcance.

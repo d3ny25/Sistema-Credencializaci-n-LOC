@@ -23,3 +23,26 @@ Homestead.json
 Homestead.yaml
 Thumbs.db
 .env.docker
+
+# Variantes de entorno (pueden contener APP_KEY y credenciales); solo se versiona la plantilla.
+.env.*
+!.env.example
+
+# Padrones y archivos operativos LOC: contienen datos personales y nunca se versionan.
+/Gestion de informacion/
+
+# Hojas de cálculo y CSV en cualquier ubicación. Solo se permiten fixtures sintéticos en tests/Fixtures/.
+*.xls
+*.xlsx
+*.xlsm
+*.xlsb
+*.ods
+*.csv
+!/tests/Fixtures/**/*.xls
+!/tests/Fixtures/**/*.xlsx
+!/tests/Fixtures/**/*.xlsm
+!/tests/Fixtures/**/*.ods
+!/tests/Fixtures/**/*.csv
+
+# Scripts temporales y evidencias de diagnóstico (pueden incluir CUIP reales). Se guardan fuera del repositorio.
+/scratch/

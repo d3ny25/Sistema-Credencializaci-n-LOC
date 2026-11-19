@@ -62,6 +62,36 @@ Los permisos específicos de dispositivos también pueden asignarse mediante lis
 
 Laravel no accede desde el servidor al USB, a las carpetas locales de EOS Utility o del lector, al servicio SigWeb de la estación ni al controlador de impresión Zebra. La acción de diagnóstico registra explícitamente este límite y nunca comunica una conexión o impresión satisfactoria. La impresión actual y el editor de plantillas permanecen separados y sin cambios.
 
+## Indexación biométrica
+
+La indexación del repositorio biométrico (fotografías, firmas y huellas) se ejecuta **únicamente** con el comando Artisan `loc:biometricos:indexar`. No se deben usar scripts ad hoc: los antiguos scripts de `scratch/` desactivaban llaves foráneas, vaciaban los leases y alteraban el estado de todas las corridas, por lo que se retiraron del repositorio.
+
+| Opción | Uso |
+|---|---|
+| `--ambito=ESTATALES\|PREVENCION` | Obligatorio para indexar. |
+| `--path=` | Directorio raíz autorizado (por defecto, el disco configurado con `BIOMETRICOS_STORAGE_PATH`). |
+| `--dry-run` | Simulación sin escrituras en la base de datos. Ejecútela siempre antes de una corrida real. |
+| `--batch-size=` / `--limit=` | Tamaño de lote (1 a 5000) y límite de archivos para corridas controladas. |
+| `--resume[=ID\|UUID]` | Reanuda una corrida interrumpida, cancelada o fallida que no tenga proceso propietario. Cada corrida solo puede reanudarse una vez. |
+| `--status=ID\|UUID` | Consulta el estado de una corrida (solo lectura). |
+| `--cancel=ID\|UUID` | Si el proceso de la corrida sigue renovando su lease, registra la solicitud y ese proceso la aplica al inicio de su siguiente lote (termina como `cancelada` y conserva el último checkpoint). Si no tiene propietario vigente, la cancela de inmediato y libera su lease. Es idempotente. |
+| `--force` | Solo confirma la ejecución persistente sin preguntar (obligatorio en entornos no interactivos). **Nunca desplaza a otro proceso.** |
+| `--takeover` | Recupera un lease **vencido** cuyo proceso ya no está activo: incrementa el fencing token y cierra la corrida anterior como `interrumpida`. Nunca desplaza a un propietario vigente. |
+
+Un solo proceso puede indexar un ámbito a la vez (lease por ámbito, TTL de 300 s). El proceso renueva el lease al inicio de cada lote dentro de la misma transacción del lote. Si otro proceso lo recuperó, se detiene sin escribir ese lote. Ctrl+C o SIGTERM detienen la corrida al terminar el lote en curso (queda `interrumpida` y reanudable); una segunda señal sale de inmediato, y el lease se recupera después con `--takeover`.
+
+Flujo recomendado:
+
+```bash
+php artisan loc:biometricos:indexar --ambito=ESTATALES --dry-run
+php artisan loc:biometricos:indexar --ambito=ESTATALES
+php artisan loc:biometricos:indexar --status=<ID>
+```
+
+Si una corrida queda en `en_ejecucion` sin proceso vivo (por ejemplo, tras un corte del servidor), compruebe primero con `--status` que no exista ningún proceso de indexación activo. Después, cuando su lease haya vencido, ciérrela con `--cancel=<ID>` o inicie una corrida nueva con `--takeover`. No modifique las tablas `biometrico_index_runs` ni `biometrico_index_leases` manualmente.
+
+La guía operativa completa (ejemplos, códigos de salida y contingencias) está en `GUIA_OPERATIVA_COMANDO_BIOMETRICO.md`, en la carpeta de documentación del proyecto fuera del repositorio.
+
 ## Importación del padrón de personal LOC
 
 La sección Gestión de información permite cargar un libro Excel binario `.xls`, revisar sus filas y confirmar explícitamente los cambios al padrón. Requiere `phpoffice/phpspreadsheet`, las migraciones aplicadas y acceso autorizado a Administración (`auth` + `can:access-administration`). El archivo se guarda con nombre aleatorio en el disco privado `local`, se calcula su SHA-256 y se elimina al terminar el análisis; los valores de origen quedan en staging para revisión y trazabilidad.
