@@ -126,7 +126,8 @@ class BiometricConcurrencyAndLeaseTest extends TestCase
         ]);
 
         $nuevoWorker = new BiometricIndexingService(ownerToken: 'worker-recuperador');
-        $runNueva = $nuevoWorker->indexar(BiometricoAmbito::ESTATALES, $this->tempDir);
+        // H-02: recuperar un lease vencido exige --takeover explícito
+        $runNueva = $nuevoWorker->indexar(BiometricoAmbito::ESTATALES, $this->tempDir, takeover: true);
 
         $this->assertSame(BiometricoIndexRunEstado::COMPLETADA, $runNueva->estado);
 

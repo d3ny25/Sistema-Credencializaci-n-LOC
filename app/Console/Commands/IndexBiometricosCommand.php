@@ -11,6 +11,7 @@ use App\Models\BiometricoIndexRun;
 use App\Services\BiometricIndexingService;
 use App\Services\BiometricScannerService;
 use Illuminate\Console\Command;
+use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\Schema;
 use InvalidArgumentException;
 use RuntimeException;
@@ -45,7 +46,8 @@ class IndexBiometricosCommand extends Command
         {--dry-run : Ejecuta en modo simulaciÃ³n sin persistir en la base de datos}
         {--status= : Consulta el estado detallado de una ejecuciÃ³n (ID o UUID) en modo solo lectura}
         {--cancel= : Cancela de forma segura una ejecuciÃ³n activa (ID o UUID) liberando leases}
-        {--force : Fuerza la confirmaciÃ³n en entornos no interactivos}';
+        {--force : Confirma la ejecución persistente sin preguntar (obligatoria en entornos no interactivos). Nunca desplaza a otro proceso}
+        {--takeover : Recupera un lease VENCIDO cuyo proceso ya no está activo. Nunca desplaza a un propietario vigente}';
 
     /**
      * DescripciÃ³n del comando Artisan.
@@ -202,6 +204,37 @@ class IndexBiometricosCommand extends Command
     }
 
     /**
+     * Ctrl+C / SIGTERM (H-02): la primera señal pide detenerse al terminar el lote en curso (checkpoint
+     * coherente, corrida INTERRUMPIDA y lease liberado); la segunda sale de inmediato y el lease se
+     * recupera después con --takeover cuando venza. Devuelve la función que retira el manejador.
+     */
+    protected function registrarInterrupcionControlada(): callable
+    {
+        $senales = 0;
+        $atender = function () use (&$senales): void {
+            if (++$senales > 1) {
+                exit(130);
+            }
+            $this->indexingService->abortar();
+            $this->warn("\n Interrupción solicitada: se detendrá al terminar el lote en curso (repita para salir de inmediato).");
+        };
+
+        if (function_exists('sapi_windows_set_ctrl_handler') && PHP_SAPI === 'cli') {
+            $manejador = fn (int $evento) => $atender();
+            sapi_windows_set_ctrl_handler($manejador);
+
+            return fn () => sapi_windows_set_ctrl_handler($manejador, false);
+        }
+
+        if (extension_loaded('pcntl')) {
+            // Laravel retira estos manejadores al terminar el comando.
+            $this->trap([SIGINT, SIGTERM], $atender);
+        }
+
+        return fn () => null;
+    }
+
+    /**
      * Gestiona la cancelaciÃ³n segura e idempotente de una corrida activa.
      */
     protected function handleCancel(string $runIdentifier): int
@@ -217,13 +250,22 @@ class IndexBiometricosCommand extends Command
             $this->error($e->getMessage());
 
             return Command::FAILURE;
+        } catch (QueryException $e) {
+            report($e);
+            $this->error("No se pudo registrar la cancelación por un error de base de datos (SQLSTATE {$e->getCode()}); el detalle quedó en el log. No se modificó nada.");
+
+            return Command::FAILURE;
         } catch (Throwable $e) {
             $this->error('Error inesperado al intentar cancelar la ejecuciÃ³n: ' . $e->getMessage());
 
             return Command::FAILURE;
         }
 
-        if ($run->estado === BiometricoIndexRunEstado::CANCELADA) {
+        if ($run->estado === BiometricoIndexRunEstado::EN_EJECUCION) {
+            $this->warn("La cancelación de la ejecución [{$run->uuid}] quedó registrada.");
+            $this->line('El proceso propietario del lease la aplicará al inicio de su siguiente lote: dejará de escribir, conservará el último checkpoint confirmado y terminará como CANCELADA.');
+            $this->line('Si ese proceso ya no está activo, repita --cancel cuando el lease venza o recupere el ámbito con --takeover. Consulte el avance con --status.');
+        } elseif ($run->estado === BiometricoIndexRunEstado::CANCELADA) {
             $this->info("La ejecuciÃ³n [{$run->uuid}] ha sido cancelada exitosamente.");
             $this->line("Estado resultante: {$run->estado->value}");
             $this->line("Ãšltimo checkpoint confirmado: {$run->ultima_ruta_procesada}");
@@ -364,7 +406,7 @@ class IndexBiometricosCommand extends Command
             }
         };
 
-        $force = (bool) $this->option('force');
+        $quitarManejadorSenales = $this->registrarInterrupcionControlada();
 
         try {
             $run = $this->indexingService->indexar(
@@ -376,8 +418,19 @@ class IndexBiometricosCommand extends Command
                 limit: $limitOpt,
                 progressCallback: $progressCallback,
                 targetResumeIdOrUuid: $targetResumeIdOrUuid,
-                force: $force
+                takeover: (bool) $this->option('takeover')
             );
+        } catch (QueryException $e) {
+            // Nunca SQL crudo al operador: el detalle técnico queda en el log.
+            report($e);
+            if ($progressBar !== null) {
+                $progressBar->finish();
+                $this->line('');
+            }
+            $this->error("\n[ERROR DE BASE DE DATOS]");
+            $this->error("La operación fue revertida por un error de base de datos (SQLSTATE {$e->getCode()}). El detalle quedó en el log de la aplicación; el último checkpoint confirmado es reanudable.");
+
+            return Command::FAILURE;
         } catch (RuntimeException $e) {
             if ($progressBar !== null) {
                 $progressBar->finish();
@@ -405,6 +458,8 @@ class IndexBiometricosCommand extends Command
             $this->error($e->getMessage());
 
             return Command::FAILURE;
+        } finally {
+            $quitarManejadorSenales();
         }
 
         if ($progressBar !== null) {

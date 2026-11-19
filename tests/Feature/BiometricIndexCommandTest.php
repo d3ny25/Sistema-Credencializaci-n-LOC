@@ -268,6 +268,19 @@ class BiometricIndexCommandTest extends TestCase
 
         $this->assertSame(1, BiometricoIndexLease::where('ambito', 'ESTATALES')->count());
 
+        // H-02: con propietario vigente solo se registra la solicitud; el proceso la aplica en su siguiente lote.
+        $this->artisan('loc:biometricos:indexar', ['--cancel' => $run->uuid])
+            ->expectsOutputToContain('quedó registrada')
+            ->assertExitCode(Command::SUCCESS);
+
+        $run->refresh();
+        $this->assertSame(BiometricoIndexRunEstado::EN_EJECUCION, $run->estado);
+        $this->assertNotEmpty($run->metadata['cancelacion_solicitada_at'] ?? null);
+        $this->assertSame(1, BiometricoIndexLease::where('ambito', 'ESTATALES')->count());
+
+        // Si el propietario dejó de renovar (lease vencido), la cancelación es inmediata y libera el lease.
+        BiometricoIndexLease::where('ambito', 'ESTATALES')->update(['lease_expires_at' => now()->subMinute()]);
+
         $this->artisan('loc:biometricos:indexar', ['--cancel' => $run->uuid])
             ->expectsOutputToContain('ha sido cancelada exitosamente')
             ->expectsOutputToContain('Los leases asociados fueron liberados')

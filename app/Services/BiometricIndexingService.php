@@ -11,6 +11,9 @@ use App\Enums\BiometricoIncidenciaSeveridad;
 use App\Enums\BiometricoIncidenciaTipo;
 use App\Enums\BiometricoIndexRunEstado;
 use App\Enums\BiometricoTipoIdentificacion;
+use App\Exceptions\BiometricoIndexacionCanceladaException;
+use App\Exceptions\BiometricoLeaseOcupadoException;
+use App\Exceptions\BiometricoLeasePerdidoException;
 use App\Models\BiometricoArchivo;
 use App\Models\BiometricoArchivoVersion;
 use App\Models\BiometricoExpediente;
@@ -24,9 +27,13 @@ use App\Models\User;
 use App\Support\BiometricFilenameParser;
 use App\Support\BiometricScanEntry;
 use App\Support\StreamingHashCalculator;
+use Illuminate\Database\ConcurrencyErrorDetector;
+use Illuminate\Database\QueryException;
+use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use InvalidArgumentException;
+use LogicException;
 use RuntimeException;
 
 /**
@@ -47,6 +54,7 @@ class BiometricIndexingService
 {
     public const DEFAULT_CHUNK_SIZE = 500;
     public const DEFAULT_LEASE_TTL_SECONDS = 300; // 5 minutos de vigencia de lease
+    protected const INTENTOS_POR_LOTE = 3; // reintentos del lote ante deadlock / lock wait timeout
 
     protected BiometricScannerService $scanner;
     protected BiometricFilenameParser $parser;
@@ -118,8 +126,14 @@ class BiometricIndexingService
     }
 
     /**
-     * Cancela de forma atómica y segura una ejecución de indexación activa,
-     * liberando los leases asociados y marcando el run como CANCELADA sin provocar falsos desaparecidos.
+     * Cancela de forma idempotente una ejecución de indexación (H-02).
+     *
+     * - Si su proceso conserva un lease vigente, solo registra la solicitud: ese proceso la atiende al
+     *   inicio de su siguiente lote, deja de escribir y termina como CANCELADA (la corrida sigue EN_EJECUCION).
+     * - Si no tiene propietario vigente (sin lease o lease vencido), la cancela de inmediato y libera su lease.
+     *   Un proceso lento que aún viviera perdería el lease y se detendría sin escribir.
+     *
+     * Orden de bloqueo lease → corrida, el mismo del worker, para no provocar deadlocks.
      */
     public function cancelarRun(string|int $runIdOrUuid, ?string $motivo = null): BiometricoIndexRun
     {
@@ -128,22 +142,44 @@ class BiometricIndexingService
             throw new InvalidArgumentException('Debe especificarse un identificador de ejecución válido.');
         }
 
-        return DB::transaction(function () use ($val, $motivo): BiometricoIndexRun {
-            /** @var BiometricoIndexRun|null $run */
-            $run = BiometricoIndexRun::query()
-                ->where(function ($q) use ($val): void {
-                    if (is_numeric($val)) {
-                        $q->where('id', (int) $val)->orWhere('uuid', $val);
-                    } else {
-                        $q->where('uuid', $val);
-                    }
-                })
-                ->lockForUpdate()
-                ->first();
+        $runId = BiometricoIndexRun::query()
+            ->where(function ($q) use ($val): void {
+                if (is_numeric($val)) {
+                    $q->where('id', (int) $val)->orWhere('uuid', $val);
+                } else {
+                    $q->where('uuid', $val);
+                }
+            })
+            ->value('id');
+        if ($runId === null) {
+            throw new InvalidArgumentException("No se encontró ninguna ejecución con el identificador '{$val}'.");
+        }
 
-            if ($run === null) {
-                throw new InvalidArgumentException("No se encontró ninguna ejecución con el identificador '{$val}'.");
+        try {
+            return $this->registrarCancelacion($runId, $motivo);
+        } catch (QueryException $e) {
+            if ((new ConcurrencyErrorDetector())->causedByConcurrencyError($e)) {
+                throw new BiometricoLeaseOcupadoException(
+                    'El proceso de indexación está confirmando un lote y retiene el bloqueo. No se modificó nada; repita --cancel en unos segundos.',
+                    0,
+                    $e
+                );
             }
+
+            throw $e;
+        }
+    }
+
+    protected function registrarCancelacion(int $runId, ?string $motivo): BiometricoIndexRun
+    {
+        return DB::transaction(function () use ($runId, $motivo): BiometricoIndexRun {
+            $ambito = BiometricoIndexRun::query()->whereKey($runId)->value('ambito');
+
+            /** @var BiometricoIndexLease|null $lease */
+            $lease = BiometricoIndexLease::query()->where('ambito', $ambito)->lockForUpdate()->first();
+
+            /** @var BiometricoIndexRun $run */
+            $run = BiometricoIndexRun::query()->whereKey($runId)->lockForUpdate()->firstOrFail();
 
             // Si ya está finalizada, retornarla sin alteración (idempotencia)
             if ($run->estado->isFinalizada()) {
@@ -151,16 +187,21 @@ class BiometricIndexingService
             }
 
             $resumen = $motivo ?? 'Cancelación administrativa solicitada por el operador.';
+            $leaseDeLaCorrida = $lease !== null && (int) $lease->biometrico_index_run_id === (int) $run->id;
+
+            if ($leaseDeLaCorrida && ! $lease->isExpired()) {
+                $run->metadata = array_merge($run->metadata ?? [], [
+                    'cancelacion_solicitada_at' => now()->toIso8601String(),
+                    'cancelacion_motivo' => $resumen,
+                ]);
+                $run->save();
+
+                return $run;
+            }
+
             $run->marcarCancelada($resumen);
 
-            // Liberar el lease asociado si apunta a este run
-            $lease = BiometricoIndexLease::query()
-                ->where('ambito', $run->ambito)
-                ->where('biometrico_index_run_id', $run->id)
-                ->lockForUpdate()
-                ->first();
-
-            if ($lease !== null) {
+            if ($leaseDeLaCorrida) {
                 $lease->delete();
             }
 
@@ -191,7 +232,7 @@ class BiometricIndexingService
         ?User $iniciadoPor = null,
         ?callable $progressCallback = null,
         string|int|null $targetResumeIdOrUuid = null,
-        bool $force = false
+        bool $takeover = false
     ): BiometricoIndexRun {
         if ($chunkSize <= 0) {
             throw new InvalidArgumentException("El tamaño de lote debe ser un entero positivo: {$chunkSize}");
@@ -207,8 +248,10 @@ class BiometricIndexingService
 
         $startAfter = null;
         $reanudadoDeUuid = null;
+        $reanudarRunId = null;
 
-        // AUD-243-005: Validación de identidad de raíz, ámbito y fingerprint al reanudar
+        // AUD-243-005: Validación de identidad de raíz, ámbito y fingerprint al reanudar.
+        // H-02: solo corridas terminales, no reanudadas antes y sin lease que las referencie.
         if ($resume) {
             $prevQuery = BiometricoIndexRun::query()
                 ->where('ambito', $ambito->value)
@@ -216,7 +259,9 @@ class BiometricIndexingService
                     BiometricoIndexRunEstado::INTERRUMPIDA->value,
                     BiometricoIndexRunEstado::CANCELADA->value,
                     BiometricoIndexRunEstado::FALLIDA->value,
-                ]);
+                ])
+                ->whereNull('metadata->reanudada_por_uuid')
+                ->whereNotIn('id', BiometricoIndexLease::query()->select('biometrico_index_run_id'));
 
             if ($targetResumeIdOrUuid !== null && trim((string) $targetResumeIdOrUuid) !== '') {
                 $targetVal = trim((string) $targetResumeIdOrUuid);
@@ -235,7 +280,7 @@ class BiometricIndexingService
 
             if ($prevRun === null && $targetResumeIdOrUuid !== null) {
                 throw new InvalidArgumentException(
-                    "No se encontró ninguna ejecución previa reanudable con el identificador '{$targetResumeIdOrUuid}' para el ámbito {$ambito->value}."
+                    "No se encontró ninguna ejecución previa reanudable con el identificador '{$targetResumeIdOrUuid}' para el ámbito {$ambito->value} (debe estar interrumpida, cancelada o fallida, sin proceso propietario y sin haber sido reanudada antes)."
                 );
             }
 
@@ -260,6 +305,7 @@ class BiometricIndexingService
 
                 $startAfter = $prevRun->ultima_ruta_procesada;
                 $reanudadoDeUuid = $prevRun->uuid;
+                $reanudarRunId = (int) $prevRun->id;
             }
         }
 
@@ -283,7 +329,7 @@ class BiometricIndexingService
 
         // AUD-243-001 / NUEVO-243-003: Adquisición atómica del lease creando el run en la misma transacción
         if (! $dryRun) {
-            $run = $this->adquirirLease($ambito, $runAttributes, $force);
+            $run = $this->adquirirLease($ambito, $runAttributes, $takeover, $reanudarRunId);
         } else {
             // AUD-244-002: En modo dry-run NO persistir el run en base de datos; mantener estrictamente en memoria
             /** @var BiometricoIndexRun $run */
@@ -303,8 +349,6 @@ class BiometricIndexingService
 
             foreach ($generator as $entry) {
                 if ($this->isInterrupted) {
-                    $run->estado = BiometricoIndexRunEstado::INTERRUMPIDA;
-                    $run->resumen_interrupcion = 'Ejecución interrumpida manualmente.';
                     break;
                 }
 
@@ -330,11 +374,8 @@ class BiometricIndexingService
                         $progressCallback($run->total_archivos_procesados, $run->total_archivos_detectados, $run);
                     }
 
+                    // Sin escrituras fuera del lote: el checkpoint y las métricas se confirman en su transacción.
                     gc_collect_cycles();
-                    $run->memoria_pico_mb = round(memory_get_peak_usage(true) / 1024 / 1024, 2);
-                    if (! $dryRun) {
-                        $run->save();
-                    }
                 }
 
                 if ($limit !== null && $run->total_archivos_procesados + count($currentBatch) >= $limit) {
@@ -348,19 +389,14 @@ class BiometricIndexingService
                 $this->procesarLote($currentBatch, $ambito, $run, $dryRun, $batchIndex);
                 $currentBatch = [];
                 gc_collect_cycles();
-                $run->memoria_pico_mb = round(memory_get_peak_usage(true) / 1024 / 1024, 2);
-                if (! $dryRun) {
-                    $run->save();
-                }
             }
 
             if ($this->isInterrupted) {
-                $run->estado = BiometricoIndexRunEstado::INTERRUMPIDA;
-                $run->resumen_interrupcion = $run->resumen_interrupcion ?? 'Ejecución interrumpida antes de completar el escaneo.';
                 $run->memoria_pico_mb = round(memory_get_peak_usage(true) / 1024 / 1024, 2);
-                if (! $dryRun) {
-                    $run->save();
-                }
+                $this->cerrarCorridaSiSigueActiva(
+                    $run,
+                    fn (BiometricoIndexRun $r) => $r->marcarInterrumpida('Ejecución interrumpida por el operador antes de completar el escaneo; el último checkpoint confirmado es reanudable.')
+                );
 
                 return $run;
             }
@@ -376,27 +412,38 @@ class BiometricIndexingService
                 $this->detectarArchivosDesaparecidos($ambito, $canonicalRoot, $observedPaths, $run);
             }
 
-            // AUD-243-001: Validar propiedad antes de marcar finalizada
-            if (! $dryRun) {
-                $this->validarPropiedadActiva($ambito);
+            $run->memoria_pico_mb = round(memory_get_peak_usage(true) / 1024 / 1024, 2);
+
+            if ($dryRun) {
+                $run->marcarFinalizada();
+
+                return $run;
             }
 
-            $run->marcarFinalizada();
-            $run->memoria_pico_mb = round(memory_get_peak_usage(true) / 1024 / 1024, 2);
-            if (! $dryRun) {
-                $run->save();
-            }
+            // AUD-243-001 / H-02: la propiedad se verifica y el estado final se escribe en la misma transacción.
+            DB::transaction(function () use ($ambito, $run): void {
+                $this->verificarYRenovarLease($ambito);
+                $this->verificarCancelacionSolicitada($run);
+                $this->cerrarCorridaSiSigueActiva($run, fn (BiometricoIndexRun $r) => $r->marcarFinalizada());
+            });
 
             return $run;
+        } catch (BiometricoIndexacionCanceladaException $e) {
+            // --cancel atendido en un punto seguro: se conservan los lotes y el checkpoint ya confirmados.
+            $this->cerrarCorridaSiSigueActiva($run, fn (BiometricoIndexRun $r) => $r->marcarCancelada($e->getMessage()));
+
+            return $run;
+        } catch (BiometricoLeasePerdidoException $e) {
+            // Split-brain prevenido: si nadie cerró la corrida (p. ej. lease borrado), queda reanudable y no huérfana.
+            rescue(fn () => $this->cerrarCorridaSiSigueActiva(
+                $run,
+                fn (BiometricoIndexRun $r) => $r->marcarInterrumpida('El proceso perdió el lease de indexación y se detuvo sin escribir el lote en curso.')
+            ), report: false);
+
+            throw $e;
         } catch (\Throwable $e) {
-            // Si el error fue por pérdida de lease (split-brain prevenido), no alterar el estado terminal
-            if (! str_contains($e->getMessage(), 'perdió el lease')) {
-                $run->marcarFallida($e->getMessage());
-                $run->memoria_pico_mb = round(memory_get_peak_usage(true) / 1024 / 1024, 2);
-                if (! $dryRun) {
-                    $run->save();
-                }
-            }
+            $run->memoria_pico_mb = round(memory_get_peak_usage(true) / 1024 / 1024, 2);
+            rescue(fn () => $this->cerrarCorridaSiSigueActiva($run, fn (BiometricoIndexRun $r) => $r->marcarFallida($e->getMessage())), report: false);
 
             throw $e;
         } finally {
@@ -419,9 +466,11 @@ class BiometricIndexingService
         int $batchIndex
     ): void {
         $operacion = function () use ($batch, $ambito, $run, $dryRun, $batchIndex): void {
-            // AUD-243-001: Verificar y renovar lease (heartbeat con fencing token)
+            // AUD-243-001 / H-02: heartbeat con fencing (bloquea el lease hasta el commit) y punto seguro de --cancel,
+            // ambos antes de cualquier escritura del lote.
             if (! $dryRun) {
                 $this->verificarYRenovarLease($ambito);
+                $this->verificarCancelacionSolicitada($run);
             }
 
             $lastProcessedEntry = null;
@@ -579,6 +628,7 @@ class BiometricIndexingService
                 $run->ultimo_checkpoint_id = $batchIndex;
                 $run->ultimo_directorio_procesado = dirname($lastProcessedEntry->rutaRelativa);
                 $run->ultima_ruta_procesada = $lastProcessedEntry->rutaRelativa;
+                $run->memoria_pico_mb = round(memory_get_peak_usage(true) / 1024 / 1024, 2);
                 if (! $dryRun) {
                     $run->save();
                 }
@@ -588,7 +638,7 @@ class BiometricIndexingService
         if ($dryRun) {
             $operacion();
         } else {
-            DB::transaction($operacion);
+            $this->ejecutarLoteAtomico($run, $operacion);
         }
     }
 
@@ -713,6 +763,7 @@ class BiometricIndexingService
                 // Si ya existe un expediente oficial en su ámbito correcto, alertar anomalía y bloquear credencialización
                 $expOficial = BiometricoExpediente::where('cuip', $cuipNormalizado)
                     ->where('ambito', $ambitoOficial->value)
+                    ->lockForUpdate()
                     ->first();
 
                 if ($expOficial !== null) {
@@ -754,11 +805,7 @@ class BiometricIndexingService
             }
         }
 
-        /** @var BiometricoExpediente $expediente */
-        $expediente = BiometricoExpediente::firstOrCreate([
-            'cuip' => $cuipNormalizado,
-            'ambito' => $ambitoIngestion->value,
-        ]);
+        $expediente = $this->obtenerExpedienteBloqueado($cuipNormalizado, $ambitoIngestion->value);
 
         if ($expediente->persona_id === null && $persona !== null) {
             $expediente->persona_id = $persona->id;
@@ -777,7 +824,7 @@ class BiometricIndexingService
         // Si el slot está libre
         if ($existingSlotId === null) {
             $expediente->{$slotKey} = $archivo->id;
-            $expediente->recalcularCompletitud();
+            $this->recalcularCompletitudActual($expediente);
             $expediente->save();
 
             BiometricoSlotCandidato::updateOrCreate([
@@ -879,7 +926,7 @@ class BiometricIndexingService
         $expediente->tiene_duplicados = true;
         $expediente->tiene_anomalias = true;
         $expediente->estado_revision = 'en_aclaracion';
-        $expediente->recalcularCompletitud();
+        $this->recalcularCompletitudActual($expediente);
         $expediente->save();
 
         $this->registrarIncidencia($run, [
@@ -903,6 +950,49 @@ class BiometricIndexingService
     }
 
     /**
+     * H-02: mismo protocolo que BiometricUpdateService (lockForUpdate del expediente) para serializar
+     * captura manual e indexación sobre el mismo expediente. La exclusión del ámbito no lo sustituye.
+     */
+    protected function obtenerExpedienteBloqueado(string $cuip, string $ambito): BiometricoExpediente
+    {
+        $claves = ['cuip' => $cuip, 'ambito' => $ambito];
+
+        $expediente = BiometricoExpediente::query()->where($claves)->lockForUpdate()->first();
+        if ($expediente !== null) {
+            return $expediente;
+        }
+
+        try {
+            return BiometricoExpediente::create($claves);
+        } catch (UniqueConstraintViolationException) {
+            // La captura lo creó en paralelo: la lectura con bloqueo ve la fila confirmada, no la instantánea del lote.
+            return BiometricoExpediente::query()->where($claves)->lockForUpdate()->firstOrFail();
+        }
+    }
+
+    /**
+     * Recalcula la completitud leyendo los archivos de los slots con bloqueo compartido: así ve lo que la
+     * captura ya confirmó y no la instantánea REPEATABLE READ tomada al inicio del lote.
+     */
+    protected function recalcularCompletitudActual(BiometricoExpediente $expediente): void
+    {
+        $slots = [
+            'foto' => 'foto_archivo_id',
+            'firma' => 'firma_archivo_id',
+            'pulgar_derecho' => 'pulgar_derecho_archivo_id',
+            'pulgar_izquierdo' => 'pulgar_izquierdo_archivo_id',
+        ];
+        $ids = array_values(array_filter(array_map(fn (string $columna) => $expediente->{$columna}, $slots)));
+        $archivos = $ids === []
+            ? collect()
+            : BiometricoArchivo::query()->whereKey($ids)->sharedLock()->get()->keyBy('id');
+
+        $expediente->recalcularCompletitud(
+            array_map(fn (string $columna) => $archivos->get($expediente->{$columna}), $slots)
+        );
+    }
+
+    /**
      * AUD-243-001 / AUD-243-002: Detección de desaparecidos condicionada a carpetas accesibles,
      * dividida en lotes atómicos con heartbeat de renovación de lease para prevenir split-brain.
      */
@@ -918,8 +1008,9 @@ class BiometricIndexingService
             ->vigentes()
             ->where('estado_archivo', '!=', BiometricoEstadoArchivo::DESAPARECIDO->value)
             ->chunkById($chunkSize, function ($archivosActivos) use ($ambito, $canonicalRoot, $observedPaths, $run): void {
-                DB::transaction(function () use ($archivosActivos, $ambito, $canonicalRoot, $observedPaths, $run): void {
+                $this->ejecutarLoteAtomico($run, function () use ($archivosActivos, $ambito, $canonicalRoot, $observedPaths, $run): void {
                     $this->verificarYRenovarLease($ambito);
+                    $this->verificarCancelacionSolicitada($run);
 
                     foreach ($archivosActivos as $activo) {
                         if (! isset($observedPaths[$activo->ruta_relativa])) {
@@ -951,10 +1042,11 @@ class BiometricIndexingService
                                 if ($activo->cuip_normalizado !== null) {
                                     $exp = BiometricoExpediente::where('cuip', $activo->cuip_normalizado)
                                         ->where('ambito', $ambito->value)
+                                        ->lockForUpdate()
                                         ->first();
 
                                     if ($exp !== null) {
-                                        $exp->recalcularCompletitud();
+                                        $this->recalcularCompletitudActual($exp);
                                         $exp->save();
                                     }
                                 }
@@ -967,124 +1059,242 @@ class BiometricIndexingService
     }
 
     /**
-     * AUD-243-001 / NUEVO-243-003: Adquisición atómica del lease de indexación por ámbito con fencing token.
-     * Crea el BiometricoIndexRun dentro de la transacción de adquisición para garantizar
-     * que nunca se creen runs huérfanos o espurios cuando otro worker posee el lease activo.
+     * AUD-243-001 / NUEVO-243-003 / H-02: Adquisición atómica del lease del ámbito con fencing token.
+     * La corrida se crea en la misma transacción: si el ámbito está ocupado no queda ninguna corrida huérfana.
+     *
+     * - Lease vigente de otro propietario: siempre se rechaza (también con --force, que solo confirma la ejecución).
+     * - Lease vencido de otro propietario: solo se recupera con $takeover (el operador verificó que el proceso murió);
+     *   el fencing token se incrementa y la corrida anterior se cierra como INTERRUMPIDA (o CANCELADA si lo pidió).
+     * - Reanudación: la corrida de origen se bloquea y se marca como reanudada, para que nadie más la reanude.
      */
-    protected function adquirirLease(BiometricoAmbito $ambito, array $runAttributes, bool $force = false): BiometricoIndexRun
-    {
-        return DB::transaction(function () use ($ambito, $runAttributes, $force): BiometricoIndexRun {
-            /** @var BiometricoIndexLease|null $lease */
-            $lease = BiometricoIndexLease::query()
-                ->where('ambito', $ambito->value)
-                ->lockForUpdate()
-                ->first();
+    protected function adquirirLease(
+        BiometricoAmbito $ambito,
+        array $runAttributes,
+        bool $takeover = false,
+        ?int $reanudarRunId = null
+    ): BiometricoIndexRun {
+        try {
+            return DB::transaction(function () use ($ambito, $runAttributes, $takeover, $reanudarRunId): BiometricoIndexRun {
+                /** @var BiometricoIndexLease|null $lease */
+                $lease = BiometricoIndexLease::query()
+                    ->where('ambito', $ambito->value)
+                    ->lockForUpdate()
+                    ->first();
 
-            $now = now();
-            $expiresAt = $now->copy()->addSeconds($this->leaseTtlSeconds);
+                $esAjeno = $lease !== null && $lease->owner_token !== $this->ownerToken;
 
-            if ($lease === null) {
-                $this->fencingToken = 1;
-                $runAttributes['metadata']['owner_token'] = $this->ownerToken;
-                $runAttributes['metadata']['fencing_token'] = $this->fencingToken;
-
-                /** @var BiometricoIndexRun $run */
-                $run = BiometricoIndexRun::create($runAttributes);
-
-                BiometricoIndexLease::create([
-                    'ambito' => $ambito->value,
-                    'owner_token' => $this->ownerToken,
-                    'biometrico_index_run_id' => $run->id,
-                    'fencing_token' => $this->fencingToken,
-                    'lease_expires_at' => $expiresAt,
-                    'heartbeat_at' => $now,
-                    'worker_pid' => getmypid() ?: null,
-                    'worker_host' => gethostname() ?: null,
-                ]);
-
-                return $run;
-            }
-
-            // Comprobar si el lease existente ha expirado O si se especificó $force para desalojo manual
-            if ($force || $lease->isExpired()) {
-                $this->fencingToken = (int) $lease->fencing_token + 1;
-                $runAttributes['metadata']['owner_token'] = $this->ownerToken;
-                $runAttributes['metadata']['fencing_token'] = $this->fencingToken;
-
-                /** @var BiometricoIndexRun $run */
-                $run = BiometricoIndexRun::create($runAttributes);
-
-                $oldRunId = $lease->biometrico_index_run_id;
-                if ($oldRunId !== null && $oldRunId !== $run->id) {
-                    $motivoInterrupcion = $lease->isExpired()
-                        ? 'Lease expirado y recuperado por nuevo worker'
-                        : "Lease revocado forzosamente mediante operador (--force) por el worker {$this->ownerToken}";
-
-                    BiometricoIndexRun::query()
-                        ->where('id', $oldRunId)
-                        ->where('estado', BiometricoIndexRunEstado::EN_EJECUCION->value)
-                        ->update([
-                            'estado' => BiometricoIndexRunEstado::INTERRUMPIDA->value,
-                            'resumen_interrupcion' => $motivoInterrupcion,
-                        ]);
+                if ($esAjeno && ! $lease->isExpired()) {
+                    throw new BiometricoLeaseOcupadoException(
+                        "Ya existe un lease de indexación activo para el ámbito {$ambito->value} (corrida {$lease->biometrico_index_run_id}, host {$lease->worker_host}, PID {$lease->worker_pid}, vigente hasta {$lease->lease_expires_at} UTC). "
+                        . 'Espere a que termine o cancélela con --cancel; --force solo confirma la ejecución y nunca desplaza a un propietario vigente.'
+                    );
                 }
 
-                $lease->update([
+                if ($esAjeno && ! $takeover) {
+                    throw new BiometricoLeaseOcupadoException(
+                        "El lease del ámbito {$ambito->value} está vencido desde {$lease->lease_expires_at} UTC (corrida {$lease->biometrico_index_run_id}, host {$lease->worker_host}, PID {$lease->worker_pid}). "
+                        . 'Verifique que ese proceso ya no esté activo y repita con --takeover para recuperarlo.'
+                    );
+                }
+
+                // El fencing solo sube en una adquisición nueva sobre un lease existente (takeover); nunca al renovar.
+                $this->fencingToken = match (true) {
+                    $lease === null => 1,
+                    $esAjeno => (int) $lease->fencing_token + 1,
+                    default => (int) $lease->fencing_token,
+                };
+                $runAttributes['metadata']['owner_token'] = $this->ownerToken;
+                $runAttributes['metadata']['fencing_token'] = $this->fencingToken;
+                if ($esAjeno) {
+                    $runAttributes['metadata']['takeover_de_run_id'] = $lease->biometrico_index_run_id;
+                }
+
+                /** @var BiometricoIndexRun $run */
+                $run = BiometricoIndexRun::create($runAttributes);
+
+                if ($esAjeno) {
+                    $this->cerrarCorridaDesplazada($lease, $run);
+                }
+
+                if ($reanudarRunId !== null) {
+                    $this->marcarOrigenReanudado($reanudarRunId, $run);
+                }
+
+                $now = now();
+                $datosLease = [
                     'owner_token' => $this->ownerToken,
                     'biometrico_index_run_id' => $run->id,
                     'fencing_token' => $this->fencingToken,
-                    'lease_expires_at' => $expiresAt,
+                    'lease_expires_at' => $now->copy()->addSeconds($this->leaseTtlSeconds),
                     'heartbeat_at' => $now,
                     'worker_pid' => getmypid() ?: null,
-                    'worker_host' => gethostname() ?: null,
-                ]);
+                    'worker_host' => substr((string) gethostname(), 0, 100) ?: null,
+                ];
+
+                if ($lease === null) {
+                    BiometricoIndexLease::create(['ambito' => $ambito->value] + $datosLease);
+                } else {
+                    $lease->update($datosLease);
+                }
 
                 return $run;
-            }
-
-            // Si el lease no ha expirado y pertenece a otro worker -> conflicto bloqueante sin crear run
-            if ($lease->owner_token !== $this->ownerToken) {
-                throw new RuntimeException(
-                    "Ya existe un lease de indexación activo para el ámbito {$ambito->value} (Worker Host: {$lease->worker_host}, Owner: {$lease->owner_token}, expira en {$lease->lease_expires_at}). Use --force si requiere recuperar el control de un proceso huérfano."
+            });
+        } catch (UniqueConstraintViolationException $e) {
+            throw new BiometricoLeaseOcupadoException(
+                "Otro proceso adquirió el lease del ámbito {$ambito->value} en el mismo instante. No se creó ninguna corrida; reintente cuando termine.",
+                0,
+                $e
+            );
+        } catch (QueryException $e) {
+            if ((new ConcurrencyErrorDetector())->causedByConcurrencyError($e)) {
+                throw new BiometricoLeaseOcupadoException(
+                    "El lease del ámbito {$ambito->value} está bloqueado por otro proceso (lote en curso o adquisición simultánea). No se creó ninguna corrida; reintente más tarde.",
+                    0,
+                    $e
                 );
             }
 
-            // Si pertenece al mismo owner (mismo proceso o reentrada controlada)
-            $this->fencingToken = (int) $lease->fencing_token;
-            $runAttributes['metadata']['owner_token'] = $this->ownerToken;
-            $runAttributes['metadata']['fencing_token'] = $this->fencingToken;
+            throw $e;
+        }
+    }
 
-            /** @var BiometricoIndexRun $run */
-            $run = BiometricoIndexRun::create($runAttributes);
+    /**
+     * Cierra la corrida del propietario desplazado por --takeover sin alterar su identidad histórica.
+     * Si el operador había pedido cancelarla, se respeta como CANCELADA.
+     */
+    protected function cerrarCorridaDesplazada(BiometricoIndexLease $lease, BiometricoIndexRun $nueva): void
+    {
+        $anterior = BiometricoIndexRun::query()->whereKey($lease->biometrico_index_run_id)->lockForUpdate()->first();
+        if ($anterior === null || $anterior->estado !== BiometricoIndexRunEstado::EN_EJECUCION) {
+            return;
+        }
 
-            $lease->update([
-                'biometrico_index_run_id' => $run->id,
-                'lease_expires_at' => $expiresAt,
+        $motivoCancelacion = $anterior->metadata['cancelacion_motivo'] ?? null;
+        if ($motivoCancelacion !== null) {
+            $anterior->marcarCancelada((string) $motivoCancelacion);
+
+            return;
+        }
+
+        $anterior->marcarInterrumpida(
+            "Lease expirado y recuperado por nuevo worker mediante --takeover (corrida {$nueva->id}, fencing {$lease->fencing_token} → {$this->fencingToken})."
+        );
+    }
+
+    /**
+     * Revalida bajo bloqueo que la corrida de origen sigue siendo reanudable y la marca como reanudada.
+     */
+    protected function marcarOrigenReanudado(int $origenId, BiometricoIndexRun $nueva): void
+    {
+        $origen = BiometricoIndexRun::query()->whereKey($origenId)->lockForUpdate()->first();
+        $reanudables = [
+            BiometricoIndexRunEstado::INTERRUMPIDA,
+            BiometricoIndexRunEstado::CANCELADA,
+            BiometricoIndexRunEstado::FALLIDA,
+        ];
+
+        if ($origen === null || ! in_array($origen->estado, $reanudables, true) || ! empty($origen->metadata['reanudada_por_uuid'])) {
+            throw new RuntimeException("La corrida {$origenId} ya fue reanudada por otro proceso o dejó de ser reanudable. No se creó ninguna corrida.");
+        }
+
+        $origen->metadata = array_merge($origen->metadata ?? [], [
+            'reanudada_por_uuid' => $nueva->uuid,
+            'reanudada_por_run_id' => $nueva->id,
+        ]);
+        $origen->save();
+    }
+
+    /**
+     * AUD-243-001 / H-02: Heartbeat con fencing. Debe ejecutarse dentro de la transacción del lote:
+     * el UPDATE condicional bloquea la fila del lease hasta el commit, así nadie adquiere el ámbito
+     * entre esta validación y las escrituras del lote. Renueva aunque el lease haya vencido si nadie
+     * lo tomó (owner y fencing siguen coincidiendo); si no coincide exactamente una fila, el proceso
+     * perdió la propiedad y aborta antes de escribir.
+     * Requiere PDO::MYSQL_ATTR_FOUND_ROWS (config/database.php) para contar filas coincidentes y no solo cambiadas.
+     */
+    protected function verificarYRenovarLease(BiometricoAmbito $ambito): void
+    {
+        if (DB::transactionLevel() === 0) {
+            throw new LogicException('La renovación del lease debe ejecutarse dentro de la transacción del lote.');
+        }
+
+        $now = now();
+        $renovadas = DB::table('biometrico_index_leases')
+            ->where('ambito', $ambito->value)
+            ->where('owner_token', $this->ownerToken)
+            ->where('fencing_token', $this->fencingToken)
+            ->update([
+                'lease_expires_at' => $now->copy()->addSeconds($this->leaseTtlSeconds),
                 'heartbeat_at' => $now,
+                'updated_at' => $now,
             ]);
 
-            return $run;
+        if ($renovadas !== 1) {
+            throw new BiometricoLeasePerdidoException(
+                "El worker {$this->ownerToken} perdió el lease de indexación del ámbito {$ambito->value} (fencing token {$this->fencingToken} ya no vigente). El lote en curso se revirtió y el proceso se detuvo."
+            );
+        }
+    }
+
+    /**
+     * Punto seguro de cancelación (inicio de lote, dentro de su transacción): atiende la solicitud
+     * registrada por --cancel antes de escribir nada del lote.
+     */
+    protected function verificarCancelacionSolicitada(BiometricoIndexRun $run): void
+    {
+        $metadata = BiometricoIndexRun::query()->whereKey($run->id)->lockForUpdate()->value('metadata');
+        $metadata = is_string($metadata) ? json_decode($metadata, true) : $metadata;
+
+        if (! empty($metadata['cancelacion_solicitada_at'])) {
+            throw new BiometricoIndexacionCanceladaException(
+                (string) ($metadata['cancelacion_motivo'] ?? 'Cancelación solicitada por el operador.')
+            );
+        }
+    }
+
+    /**
+     * Aplica una transición terminal solo si la corrida sigue EN_EJECUCION en BD: nunca sobrescribe
+     * CANCELADA, INTERRUMPIDA o COMPLETADA registradas por --cancel, --takeover u otra causa previa.
+     */
+    protected function cerrarCorridaSiSigueActiva(BiometricoIndexRun $run, callable $marcar): void
+    {
+        if ($run->es_dry_run) {
+            $marcar($run);
+
+            return;
+        }
+
+        DB::transaction(function () use ($run, $marcar): void {
+            $estadoActual = BiometricoIndexRun::query()->whereKey($run->id)->lockForUpdate()->value('estado');
+
+            if ($estadoActual !== BiometricoIndexRunEstado::EN_EJECUCION) {
+                $run->refresh();
+
+                return;
+            }
+
+            $marcar($run);
         });
     }
 
     /**
-     * AUD-243-001: Valida y renueva atómicamente el lease (heartbeat) comprobando el fencing token.
+     * Ejecuta un lote en una transacción con reintento ante deadlock o espera de bloqueo agotada.
+     * Los contadores en memoria de la corrida se restauran antes de cada intento y cuando el lote
+     * se revierte, para que solo reflejen lo confirmado en BD.
      */
-        protected function verificarYRenovarLease(BiometricoAmbito $ambito): void
+    protected function ejecutarLoteAtomico(BiometricoIndexRun $run, callable $operacion): void
     {
-        return; // BYPASS TEMPORAL DE LEASES
-    }
+        $confirmado = $run->getAttributes();
 
-protected function validarPropiedadActiva(BiometricoAmbito $ambito): void
-    {
-        $active = DB::table('biometrico_index_leases')
-            ->where('ambito', $ambito->value)
-            ->where('owner_token', $this->ownerToken)
-            ->where('fencing_token', $this->fencingToken)
-            ->exists();
+        try {
+            DB::transaction(function () use ($run, $operacion, $confirmado): void {
+                $run->setRawAttributes($confirmado);
+                $operacion();
+            }, self::INTENTOS_POR_LOTE);
+        } catch (\Throwable $e) {
+            $run->setRawAttributes($confirmado);
 
-        if (! $active) {
-            throw new RuntimeException("No es posible finalizar la corrida: el worker {$this->ownerToken} ya no es propietario del lease.");
+            throw $e;
         }
     }
 
