@@ -15,7 +15,8 @@ class CredentialTemplateEditorTest extends TestCase
 
     public function test_editor_is_available_as_a_demo_without_existing_credential_records(): void
     {
-        $this->get(route('impresion.plantilla'))
+        $this->actingAs(\App\Models\User::factory()->create())
+            ->get(route('impresion.plantilla'))
             ->assertOk()
             ->assertSee('Vista de demostración')
             ->assertSee('Anverso')

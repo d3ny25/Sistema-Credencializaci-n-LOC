@@ -16,6 +16,9 @@ const fitCredentialText = (container, baseSize) => {
     }
 };
 
+// El modal de la cola de impresión usa el mismo ajuste que la vista térmica (paridad WYSIWYG).
+window.fitCredentialText = fitCredentialText;
+
 const editor = document.querySelector('#credential-template-editor');
 
 if (editor) {
@@ -185,8 +188,11 @@ if (editor) {
         node.style.zIndex = String(order + 1);
         node.style.border = element.border ?? '';
         node.style.boxSizing = 'border-box';
-        text.style.width = isRotated ? `${(element.height / element.width) * 100}%` : '100%';
-        text.style.height = isRotated ? `${(element.width / element.height) * 100}%` : '100%';
+        // x/width son % del ancho físico y y/height % del alto: al rotar se corrige por la proporción de la tarjeta.
+        const aspect = Number(config.height_mm) / Number(config.width_mm);
+        text.style.width = isRotated ? `${(element.height / element.width) * aspect * 100}%` : '100%';
+        text.style.height = isRotated ? `${(element.width / element.height) / aspect * 100}%` : '100%';
+        text.style.whiteSpace = ['folio', 'cuip'].includes(element.field) ? 'nowrap' : '';
         text.style.fontFamily = element.font_family ?? 'Inter';
         text.style.fontWeight = element.weight;
         text.style.color = element.color;
@@ -979,12 +985,16 @@ if (editor) {
     const fitPrintText = () => {
         document.querySelectorAll('.credential-print-element').forEach((element) => {
             const text = element.querySelector('span');
+            // Las imágenes biométricas no tienen texto que ajustar; sin este corte el forEach se detenía.
+            if (!text) return;
             const rotation = Number(element.dataset.rotation);
             const width = Number(element.dataset.width);
             const height = Number(element.dataset.height);
             const isRotated = rotation !== 0;
-            text.style.width = isRotated ? `${(height / width) * 100}%` : '100%';
-            text.style.height = isRotated ? `${(width / height) * 100}%` : '100%';
+            const card = element.parentElement;
+            const aspect = card.offsetWidth ? card.offsetHeight / card.offsetWidth : 86 / 54;
+            text.style.width = isRotated ? `${(height / width) * aspect * 100}%` : '100%';
+            text.style.height = isRotated ? `${(width / height) / aspect * 100}%` : '100%';
             text.style.transform = `translate(-50%, -50%) rotate(${rotation}deg)`;
             fitCredentialText(element, element.dataset.fontSize);
         });

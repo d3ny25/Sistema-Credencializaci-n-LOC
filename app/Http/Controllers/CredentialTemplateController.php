@@ -295,19 +295,9 @@ class CredentialTemplateController extends Controller
     public function printPreview(Request $request): View
     {
         $requestedVersion = (string) $request->input('template_version', $request->input('template', ''));
-        if (in_array($requestedVersion, ['2', 'v2', 'version_2'], true)) {
-            $templateV2 = CredentialTemplate::query()
-                ->where('slug', self::SLUG_V2)
-                ->first();
-            $config = $templateV2?->template_config ?? $templateV2?->published_config ?? config('credential-templates.version_2') ?? config('credential-templates.default');
-            $templateVersion = $templateV2?->current_version ?? $templateV2?->published_version ?? 2;
-        } else {
-            $template = CredentialTemplate::query()
-                ->where('slug', self::SLUG_V1)
-                ->first();
-            $config = $template?->published_config ?? config('credential-templates.default');
-            $templateVersion = $template?->published_version ?? 1;
-        }
+        // Solo la versión aprobada se imprime; los borradores se revisan en el editor.
+        $plantilla = app(\App\Services\CredencialDocumentoService::class)->plantillaPublicada($requestedVersion);
+        $config = $plantilla['config'];
 
         abort_unless($config, 409, 'Aún no existe una versión aprobada para impresión.');
         abort_unless(
@@ -317,162 +307,47 @@ class CredentialTemplateController extends Controller
         );
 
         $elementoId = $request->query('elemento_id');
-        $realData = null;
-        $biometricUrls = [];
-        $isRealElement = false;
+        $elemento = null;
+        $preparacionActiva = null;
 
-        if ($elementoId && is_numeric($elementoId)) {
-            $elemento = \App\Models\SolicitudElemento::with([
-                'solicitud',
-                'persona.vigencias',
-                'armaCorta',
-                'armaLarga',
-                'credencialEmitida',
-                'expedienteBiometrico.foto',
-                'expedienteBiometrico.firma',
-                'expedienteBiometrico.pulgarDerecho',
-                'expedienteBiometrico.pulgarIzquierdo',
-            ])->find($elementoId);
+        if ($elementoId !== null && $elementoId !== '') {
+            abort_unless(is_numeric($elementoId), 404);
+            $elemento = \App\Models\SolicitudElemento::with(['solicitud', 'credencialEmitida'])->findOrFail($elementoId);
 
-            if ($elemento) {
-                $isRealElement = true;
-                $realData = $this->buildElementData($elemento);
-                $biometricUrls = $this->buildBiometricUrls($elemento);
+            // La salida real contiene CUIP, nombre y armas: mismas condiciones que la emisión.
+            // Imprimir una credencial real exige poder registrar la impresión, no solo ver biométricos.
+            abort_unless(
+                $request->user()?->can('viewPreview', $elemento) && $request->user()->can('print-credentials'),
+                403,
+                'No cuenta con autorización para imprimir esta credencial.'
+            );
+            $preparaciones = app(\App\Services\CredencialPreparacionService::class);
+            $preparaciones->validarImprimible($elemento, $elemento->credencialEmitida);
+
+            // Fase 1B.2: esta página ya no renderiza datos vigentes. La credencial real se imprime solo
+            // desde una preparación explícita (POST), cuyo snapshot alimenta la vista.
+            $preparacionActiva = \App\Models\CredencialPreparacion::query()
+                ->where('credencial_emitida_id', $elemento->credencialEmitida->id)
+                ->where('estado', \App\Models\CredencialPreparacion::PREPARADA)
+                ->first();
+            // Una preparación vencida se marca expirada (regla temporal del servicio) y no se ofrece para continuar.
+            if ($preparacionActiva !== null && ! $preparaciones->expirarSiCorresponde($preparacionActiva)->estaPreparada()) {
+                $preparacionActiva = null;
             }
         }
 
         return view('modules.credential-template-print', [
             'templateConfig' => $config,
-            'templateVersion' => $templateVersion,
+            'templateVersion' => $plantilla['version'],
             'selectedTemplateVersion' => self::resolveVersionNumber($requestedVersion),
             'fieldLabels' => config('credential-templates.fields'),
-            'demoData' => $realData ?? $this->demoData(),
-            'isRealElement' => $isRealElement,
-            'biometricUrls' => $biometricUrls,
+            'demoData' => $this->demoData(),
+            'isRealElement' => $elemento !== null,
+            'biometricUrls' => [],
+            'elementoReal' => $elemento,
+            'preparacionActiva' => $preparacionActiva,
+            'puedeRegistrarImpresion' => $elemento !== null && (bool) $request->user()?->can('print-credentials'),
         ]);
-    }
-
-    /**
-     * Construye el diccionario de campos dinámicos para una credencial real.
-     *
-     * @return array<string, string>
-     */
-    private function buildElementData(\App\Models\SolicitudElemento $elemento): array
-    {
-        $persona = $elemento->persona;
-        $nombreOficial = $persona?->nombre;
-        $nombreSolicitado = $elemento->datos_solicitados['nombre'] ?? ($elemento->datos_originales_fila['NOMBRE'] ?? null);
-        $nombre = $nombreOficial ?: ($nombreSolicitado ?: '—');
-        $categoria = $persona?->categoria ?? ($elemento->datos_solicitados['categoria'] ?? '—');
-        $subdireccion = $persona?->subdireccion ?? 'SUBDIRECCIÓN OPERATIVA';
-        $ubicacion = $persona?->municipio ?? ($elemento->datos_solicitados['municipio'] ?? 'ESTADO DE MÉXICO');
-        $credencial = $elemento->credencialEmitida;
-        $solicitud = $elemento->solicitud;
-
-        $armasAsignadas = array_values(array_filter([$elemento->armaCorta, $elemento->armaLarga]));
-        if (! empty($armasAsignadas)) {
-            $clases = [];
-            $calibres = [];
-            $marcas = [];
-            $matriculas = [];
-            $rfas = [];
-            $resguardos = [];
-            $modelos = [];
-            foreach ($armasAsignadas as $a) {
-                $clases[] = (string) ($a->clase_arma ?? ($a->tipo_arma ?? '—'));
-                $calibres[] = (string) ($a->calibre ?? '—');
-                $marcas[] = (string) ($a->marca ?? '—');
-                $matriculas[] = (string) ($a->matricula ?? '—');
-                $rfas[] = (string) ($a->rfa ?? '—');
-                $resguardos[] = (string) ($a->resguardo ?? '—');
-                $modelos[] = (string) ($a->modelo ?? '—');
-            }
-            $claseArma = implode("\n", $clases);
-            $calibre = implode("\n", $calibres);
-            $marca = implode("\n", $marcas);
-            $matricula = implode("\n", $matriculas);
-            $rfa = implode("\n", $rfas);
-            $resguardo = implode("\n", $resguardos);
-            $modelo = implode("\n", $modelos);
-            $tipoArma = count($armasAsignadas) > 1 ? 'CORTA / LARGA' : ($elemento->armaCorta ? 'CORTA' : 'LARGA');
-        } else {
-            $arma = $elemento->armaCorta ?? $elemento->armaLarga;
-            $matricula = $arma?->matricula ?? ($elemento->matricula_corta ?? ($elemento->matricula_larga ?? 'SIN ASIGNACIÓN'));
-            $tipoArma = $arma?->tipo_arma ?? ($elemento->armaCorta ? 'CORTA' : ($elemento->armaLarga ? 'LARGA' : 'NO ASIGNADA'));
-            $claseArma = $arma?->clase_arma ?? 'NO ASIGNADA';
-            $marca = $arma?->marca ?? 'NO ASIGNADA';
-            $modelo = $arma?->modelo ?? 'NO ASIGNADO';
-            $calibre = $arma?->calibre ?? 'NO ASIGNADO';
-            $rfa = $arma?->rfa ?? 'NO ASIGNADO';
-            $resguardo = $arma?->resguardo ?? 'NO ASIGNADO';
-        }
-
-        $vigenciaRecord = $persona?->vigencias?->first();
-        $fechaElaboracion = $vigenciaRecord?->fecha_elaboracion?->format('d/m/Y') ?? now()->format('d/m/Y');
-        $fechaVigencia = $vigenciaRecord?->fecha_vigencia?->format('d/m/Y') ?? now()->addYears(2)->format('d/m/Y');
-        $vigencia = "Del {$fechaElaboracion} al {$fechaVigencia}";
-
-        return [
-            'folio' => $credencial?->folio ?? 'PENDIENTE DE EMISIÓN',
-            'numero_tarjeta' => $solicitud?->numero_tarjeta ?? '—',
-            'cuip' => (string) $elemento->cuip,
-            'nombre' => (string) $nombre,
-            'categoria' => (string) $categoria,
-            'fecha_elaboracion' => $fechaElaboracion,
-            'vigencia' => $vigencia,
-            'fotografia' => 'FOTOGRAFÍA FACIAL REGISTRADA',
-            'firma_secretario' => 'FIRMA DEL SECRETARIO',
-            'firma_oficial_mayor' => 'FIRMA OFICIAL MAYOR',
-            'firma_titular' => 'FIRMA DEL ELEMENTO',
-            'subdireccion' => (string) $subdireccion,
-            'ubicacion' => (string) $ubicacion,
-            'tipo_arma' => (string) $tipoArma,
-            'clase_arma' => (string) $claseArma,
-            'calibre' => (string) $calibre,
-            'marca' => (string) $marca,
-            'matricula' => (string) $matricula,
-            'rfa' => (string) $rfa,
-            'resguardo' => (string) $resguardo,
-            'modelo' => (string) $modelo,
-            'huella_izquierda' => 'HUELLA IZQUIERDA REGISTRADA',
-            'huella_derecha' => 'HUELLA DERECHA REGISTRADA',
-            'codigo_barras' => (string) $elemento->cuip,
-            'texto_fijo' => '',
-            'firma_persona' => 'FIRMA DEL TITULAR',
-            'firma_autorizada' => 'FIRMA AUTORIZADA',
-            'nombre_firmante' => 'FIRMANTE OFICIAL',
-            'aviso_legal' => 'Esta credencial ampara la portación de armas de fuego en términos de la LOC 139.',
-        ];
-    }
-
-    /**
-     * Construye las URLs de streaming seguro para los biométricos del elemento.
-     *
-     * @return array<string, string>
-     */
-    private function buildBiometricUrls(\App\Models\SolicitudElemento $elemento): array
-    {
-        $exp = $elemento->expedienteBiometrico;
-        if (! $exp) {
-            return [];
-        }
-
-        $urls = [];
-        if ($exp->foto && $exp->foto->es_vigente) {
-            $urls['fotografia'] = route('impresion.elemento.biometrico.stream', ['elemento' => $elemento->id, 'categoria' => 'foto']);
-        }
-        if ($exp->firma && $exp->firma->es_vigente) {
-            $urls['firma_titular'] = route('impresion.elemento.biometrico.stream', ['elemento' => $elemento->id, 'categoria' => 'firma']);
-            $urls['firma_persona'] = $urls['firma_titular'];
-        }
-        if ($exp->pulgarDerecho && $exp->pulgarDerecho->es_vigente) {
-            $urls['huella_derecha'] = route('impresion.elemento.biometrico.stream', ['elemento' => $elemento->id, 'categoria' => 'pulgar_derecho']);
-        }
-        if ($exp->pulgarIzquierdo && $exp->pulgarIzquierdo->es_vigente) {
-            $urls['huella_izquierda'] = route('impresion.elemento.biometrico.stream', ['elemento' => $elemento->id, 'categoria' => 'pulgar_izquierdo']);
-        }
-
-        return $urls;
     }
 
     /**

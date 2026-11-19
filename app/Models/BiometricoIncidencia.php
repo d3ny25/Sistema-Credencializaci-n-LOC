@@ -29,6 +29,7 @@ class BiometricoIncidencia extends Model
         'descripcion',
         'detalles',
         'fecha_deteccion',
+        'credencial_preparacion_id',
     ];
 
     protected $casts = [
@@ -38,6 +39,7 @@ class BiometricoIncidencia extends Model
         'categoria' => BiometricoCategoria::class,
         'detalles' => 'array',
         'fecha_deteccion' => 'datetime',
+        'resuelta_at' => 'datetime',
     ];
 
     protected static function booted(): void
@@ -49,9 +51,17 @@ class BiometricoIncidencia extends Model
         });
 
         static::created(function (BiometricoIncidencia $incidencia): void {
-            // Incrementar de forma atómica el contador de incidencias en la ejecución asociada
-            $incidencia->run()->increment('total_incidencias');
+            // Incrementar de forma atómica el contador de incidencias en la ejecución asociada.
+            // Las incidencias de evidencia de impresión no pertenecen a una corrida del indexador.
+            if ($incidencia->biometrico_index_run_id !== null) {
+                $incidencia->run()->increment('total_incidencias');
+            }
         });
+    }
+
+    public function preparacion(): BelongsTo
+    {
+        return $this->belongsTo(CredencialPreparacion::class, 'credencial_preparacion_id');
     }
 
     public function run(): BelongsTo

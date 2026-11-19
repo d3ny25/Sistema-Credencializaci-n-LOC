@@ -106,7 +106,7 @@ class CredentialTemplateVersion2Test extends TestCase
     {
         $elemento = $this->crearElementoCompleto();
 
-        $response = $this->actingAs($this->adminUser)
+        $response = $this->actingAs(User::factory()->create(['role' => 'impresion']))
             ->get("/impresion/plantilla/imprimir?elemento_id={$elemento->id}&template_version=2");
 
         $response->assertOk()
@@ -121,7 +121,7 @@ class CredentialTemplateVersion2Test extends TestCase
             'consecutivo_tarjeta' => 1,
             'numero_oficio' => 'OF-139-2026',
             'fecha_recepcion' => now(),
-            'estado_general' => 'recibida',
+            'estado_general' => 'enviada_impresion',
         ]);
 
         $persona = LocPersona::create([
@@ -169,6 +169,14 @@ class CredentialTemplateVersion2Test extends TestCase
             'estado_tramite' => 'listo_impresion',
             'ambito_biometrico' => \App\Enums\BiometricoAmbito::ESTATALES,
             'estado_clasificacion_ambito' => \App\Enums\BiometricoClasificacionEstado::VALIDADA,
+        ]);
+
+        // Un elemento imprimible requiere tarjeta autorizada y folio asignado.
+        \App\Models\CredencialEmitida::create([
+            'solicitud_id' => $solicitud->id,
+            'solicitud_elemento_id' => $elemento->id,
+            'folio' => 'FOL-2026-09999',
+            'numero_tarjeta' => $solicitud->numero_tarjeta,
         ]);
 
         $archivos = [];

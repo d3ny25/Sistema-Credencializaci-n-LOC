@@ -12,10 +12,12 @@ use App\Models\SolicitudCredencial;
 use App\Models\SolicitudElemento;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Tests\Concerns\PreparaImpresionReal;
 use Tests\TestCase;
 
 class CredentialTemplateEditorVersion2Test extends TestCase
 {
+    use PreparaImpresionReal;
     use RefreshDatabase;
 
     private User $adminUser;
@@ -165,13 +167,18 @@ class CredentialTemplateEditorVersion2Test extends TestCase
             ])->assertOk();
 
         $elemento = $this->crearElementoCompleto();
+        $url = "/impresion/elementos/{$elemento->id}/previsualizacion?template_version=2";
 
-        $previewResponse = $this->actingAs($this->adminUser)
-            ->getJson("/impresion/elementos/{$elemento->id}/previsualizacion?template_version=2");
+        // Un borrador sin aprobar no debe llegar a la vista previa de impresión.
+        $antes = $this->actingAs($this->adminUser)->getJson($url)->assertOk();
+        $this->assertNotSame('2px solid #000000', $antes->json('template.config.faces.front.elements.0.border'));
 
-        $previewResponse->assertOk()
+        $this->aprobarVersionV2(1);
+
+        $this->actingAs($this->adminUser)->getJson($url)
+            ->assertOk()
             ->assertJsonPath('success', true)
-            ->assertJsonPath('template.version', 1) // current_version of draft
+            ->assertJsonPath('template.version', 1)
             ->assertJsonPath('template.config.faces.front.elements.0.border', '2px solid #000000')
             ->assertJsonPath('template.config.faces.front.elements.0.x', 14);
     }
@@ -187,14 +194,36 @@ class CredentialTemplateEditorVersion2Test extends TestCase
                 'template_version' => 2,
             ])->assertOk();
 
+        // Fase 1B.2: la credencial real se imprime desde el snapshot de una preparación.
+        $this->fakeDiscosEvidencia();
         $elemento = $this->crearElementoCompleto();
+        $this->materializarArchivos($elemento->expedienteBiometrico);
+        $impresor = User::factory()->create(['role' => 'impresion']);
 
-        $printResponse = $this->actingAs($this->adminUser)
-            ->get("/impresion/plantilla/imprimir?elemento_id={$elemento->id}&template_version=2");
+        $antes = $this->prepararImpresion($impresor, $elemento, 'emision', ['template_version' => '2']);
+        $this->actingAs($impresor)->get(route('impresion.preparacion', $antes))->assertOk()->assertDontSee('border: 1.5px solid #d9251d', false);
 
-        $printResponse->assertOk()
+        $this->aprobarVersionV2(1);
+
+        // El snapshot ya preparado no cambia al publicar otra versión; una preparación nueva sí la usa.
+        $this->actingAs($impresor)->get(route('impresion.preparacion', $antes))->assertOk()->assertDontSee('border: 1.5px solid #d9251d', false);
+        $this->actingAs($impresor)->postJson(route('impresion.preparacion.cancelar', $antes), ['motivo' => 'Nueva versión publicada'])->assertOk();
+        $despues = $this->prepararImpresion($impresor, $elemento, 'emision', ['template_version' => '2']);
+
+        $this->actingAs($impresor)->get(route('impresion.preparacion', $despues))
+            ->assertOk()
             ->assertViewIs('modules.credential-template-print')
             ->assertSee('border: 1.5px solid #d9251d', false);
+    }
+
+    private function aprobarVersionV2(int $version): void
+    {
+        $registro = CredentialTemplate::where('slug', CredentialTemplateController::SLUG_V2)->firstOrFail()
+            ->versions()->where('version', $version)->firstOrFail();
+
+        $this->actingAs($this->adminUser)
+            ->postJson(route('impresion.plantilla.aprobar', $registro))
+            ->assertOk();
     }
 
     public function test_07_unauthorized_users_cannot_save_modifications(): void
@@ -297,7 +326,7 @@ class CredentialTemplateEditorVersion2Test extends TestCase
             ->assertJsonPath('template.version', 1);
 
         // Print default
-        $printResponse = $this->actingAs($this->adminUser)
+        $printResponse = $this->actingAs(User::factory()->create(['role' => 'impresion']))
             ->get(route('impresion.plantilla.imprimir', ['elemento_id' => $elemento->id]));
 
         $printResponse->assertOk()
@@ -347,14 +376,13 @@ class CredentialTemplateEditorVersion2Test extends TestCase
         $this->assertEquals(19.5, $editorConfig['faces']['front']['elements'][0]['x']);
         $this->assertSame('#e11d48', $editorConfig['faces']['front']['elements'][0]['color']);
 
-        // 7. Verificar que la vista previa recupera exactamente los mismos valores
+        // 7. La vista previa de impresión no usa el borrador sin aprobar
         $elemento = $this->crearElementoCompleto();
         $previewResponse = $this->actingAs($this->adminUser)
             ->getJson("/impresion/elementos/{$elemento->id}/previsualizacion?template_version=2");
 
-        $previewResponse->assertOk()
-            ->assertJsonPath('template.config.faces.front.elements.0.x', 19.5)
-            ->assertJsonPath('template.config.faces.front.elements.0.color', '#e11d48');
+        $previewResponse->assertOk();
+        $this->assertNotSame('#e11d48', $previewResponse->json('template.config.faces.front.elements.0.color'));
 
         // 8. Abrir V1 y comprobar que permanece intacta
         $v1Response = $this->actingAs($this->adminUser)
@@ -403,14 +431,14 @@ class CredentialTemplateEditorVersion2Test extends TestCase
         $this->assertEquals(33.3, $editorAfterDraftConfig['faces']['front']['elements'][0]['x']);
         $this->assertSame('#10b981', $editorAfterDraftConfig['faces']['front']['elements'][0]['color']);
 
-        // D. Precedencia en Vista Previa de calibración: debe cargar el nuevo borrador guardado de V2
+        // D. La vista previa de impresión sigue en la versión aprobada aunque exista un borrador posterior
         $previewAfterDraft = $this->actingAs($this->adminUser)
             ->getJson("/impresion/elementos/{$elemento->id}/previsualizacion?template_version=2");
 
         $previewAfterDraft->assertOk()
-            ->assertJsonPath('template.version', 2)
-            ->assertJsonPath('template.config.faces.front.elements.0.x', 33.3)
-            ->assertJsonPath('template.config.faces.front.elements.0.color', '#10b981');
+            ->assertJsonPath('template.version', 1)
+            ->assertJsonPath('template.config.faces.front.elements.0.x', 19.5)
+            ->assertJsonPath('template.config.faces.front.elements.0.color', '#e11d48');
 
         // E. Precedencia en BD: published_config permanece inalterada con la versión aprobada previa
         $this->assertEquals(19.5, $templateV2->published_config['faces']['front']['elements'][0]['x']);
@@ -424,7 +452,7 @@ class CredentialTemplateEditorVersion2Test extends TestCase
             'consecutivo_tarjeta' => 1,
             'numero_oficio' => 'OF-139-2026',
             'fecha_recepcion' => now(),
-            'estado_general' => 'recibida',
+            'estado_general' => 'enviada_impresion',
         ]);
 
         $persona = LocPersona::create([
@@ -457,6 +485,14 @@ class CredentialTemplateEditorVersion2Test extends TestCase
             'estado_tramite' => 'listo_impresion',
             'ambito_biometrico' => \App\Enums\BiometricoAmbito::ESTATALES,
             'estado_clasificacion_ambito' => \App\Enums\BiometricoClasificacionEstado::VALIDADA,
+        ]);
+
+        // Un elemento imprimible requiere tarjeta autorizada y folio asignado.
+        \App\Models\CredencialEmitida::create([
+            'solicitud_id' => $solicitud->id,
+            'solicitud_elemento_id' => $elemento->id,
+            'folio' => 'FOL-2026-09999',
+            'numero_tarjeta' => $solicitud->numero_tarjeta,
         ]);
 
         $archivos = [];

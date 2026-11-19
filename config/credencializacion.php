@@ -55,5 +55,47 @@ return [
     | o null para utilizar el año corriente del servidor.
     */
     'anio_expedicion_fijo' => env('CREDENCIAL_ANIO_FIJO', null),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Folio Institucional de Credencial
+    |--------------------------------------------------------------------------
+    | Formato: {prefijo}{periodo sin guion}{separador}{consecutivo}, p. ej. OM2527E00001.
+    | El periodo es el mismo de las tarjetas (tarjeta_periodo); el consecutivo es
+    | global y no se reinicia al cambiar de periodo (regla institucional confirmada).
+    | Un folio asignado nunca se libera ni se reutiliza: la secuencia solo avanza y una
+    | credencial cancelada conserva su folio. `folio_ultimo_consecutivo` es el
+    | último folio institucional ya utilizado (OM2527E00000 → 0) y solo se usa para
+    | inicializar la secuencia cuando todavía no existe.
+    */
+    'folio_prefijo' => env('CREDENCIAL_FOLIO_PREFIJO', 'OM'),
+    'folio_separador' => env('CREDENCIAL_FOLIO_SEPARADOR', 'E'),
+    'folio_digitos' => (int) env('CREDENCIAL_FOLIO_DIGITOS', 5),
+    'folio_secuencia_clave' => env('CREDENCIAL_FOLIO_SECUENCIA_CLAVE', 'folio_credencial'),
+    'folio_ultimo_consecutivo' => (int) env('CREDENCIAL_FOLIO_ULTIMO_CONSECUTIVO', 0),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Preparación de impresión y evidencia histórica (Fase 1B.2)
+    |--------------------------------------------------------------------------
+    | Vigencias autorizadas: la vista sirve imágenes 30 min; la preparación vence a las 24 h;
+    | una impresión física puede confirmarse extemporáneamente hasta 72 h después de la
+    | primera visualización. `app_release` identifica el despliegue en la huella de
+    | renderizado (opcional; nulo si no se define en el despliegue).
+    */
+    'impresion' => [
+        'vista_minutos' => 30,
+        'preparacion_horas' => 24,
+        'extemporanea_horas' => 72,
+        'app_release' => env('APP_RELEASE'),
+    ],
+
+    /*
+    | Expediente documental (Entrega y Seguimiento): tamaño máximo por archivo en KB. 20 MB cubre oficios
+    | escaneados y está por debajo de upload_max_filesize (80M) y post_max_size (96M) del servidor.
+    */
+    'documentos' => [
+        'max_kb' => 20480,
+    ],
 ];
 

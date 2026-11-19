@@ -76,6 +76,26 @@ return [
             'serve' => false,
         ],
 
+        // Evidencia histórica de impresión (Fase 1B.2): privada, direccionada por SHA-256, sin URL pública.
+        // Debe ser un disco local: la publicación usa link() dentro del mismo volumen NTFS.
+        'biometricos_evidencia' => [
+            'driver' => 'local',
+            'root' => storage_path('app/biometricos_evidencia'),
+            'throw' => true,
+            'report' => false,
+            'serve' => false,
+        ],
+
+        // Expediente documental de Entrega y Seguimiento (Iteración 1.4): privado, sin URL pública;
+        // solo se sirve por rutas autenticadas que verifican el expediente. Nombres internos UUID.
+        'documentos_entrega' => [
+            'driver' => 'local',
+            'root' => storage_path('app/documentos_entrega'),
+            'throw' => true,
+            'report' => false,
+            'serve' => false,
+        ],
+
     ],
 
     /*
