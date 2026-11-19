@@ -36,7 +36,7 @@
             'border' => 'border-red-200',
         ],
         'warning' => [
-            'badge' => 'bg-amber-50 text-estado-adv ring-amber-600/20 hover:bg-amber-100/80',
+            'badge' => 'bg-amber-50 text-amber-800 ring-amber-600/20 hover:bg-amber-100/80',
             'dot' => 'bg-estado-adv',
             'border' => 'border-amber-200',
         ],
@@ -82,7 +82,7 @@
                 <span class="h-1.5 w-1.5 rounded-full {{ $selectedTone['dot'] }}" aria-hidden="true"></span>
                 <span>{{ $primaryLabel }}</span>
                 @if ($extraCount > 0)
-                    <span class="ml-1 rounded bg-red-200/60 px-1 py-0.2 text-[10px] font-bold text-red-900">+{{ $extraCount }} más</span>
+                    <span class="ml-1 rounded bg-red-200/60 px-1 py-0.2 text-2xs font-bold text-red-900">+{{ $extraCount }} más</span>
                 @endif
             </span>
             <ul class="list-disc pl-4 space-y-0.5 text-xs text-tx-soft" role="list">
@@ -96,13 +96,13 @@
                  x-data
                  @click.outside="$el.removeAttribute('open')"
                  @keydown.escape="$el.removeAttribute('open')">
-            <summary class="inline-flex cursor-pointer select-none items-center gap-1 max-w-full rounded-full px-2 py-0.5 text-[10.5px] font-medium ring-1 ring-inset transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-inst-700 focus-visible:ring-offset-1 {{ $selectedTone['badge'] }}"
+            <summary class="inline-flex cursor-pointer select-none items-center gap-1 max-w-full rounded-full px-2 py-0.5 text-2xs font-medium ring-1 ring-inset transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-inst-700 focus-visible:ring-offset-1 {{ $selectedTone['badge'] }}"
                      title="{{ $primaryLabel }} · Clic para consultar detalle de motivos"
                      aria-haspopup="true">
                 <span class="h-1.5 w-1.5 rounded-full shrink-0 {{ $selectedTone['dot'] }}" aria-hidden="true"></span>
                 <span class="font-medium truncate max-w-[135px]">{{ $primaryLabel }}</span>
                 @if ($extraCount > 0)
-                    <span class="inline-flex items-center rounded-full bg-red-200/80 px-1 py-0.2 text-[9px] font-bold text-red-900 shadow-2xs shrink-0">
+                    <span class="inline-flex items-center rounded-full bg-red-200/80 px-1 py-0.2 text-2xs font-bold text-red-900 shadow-2xs shrink-0">
                         +{{ $extraCount }}
                     </span>
                 @endif
@@ -155,7 +155,7 @@
 
                 @if (!empty($reasonsList))
                     <div class="space-y-1.5">
-                        <span class="text-[10px] font-semibold uppercase tracking-wider text-slate-400 block">
+                        <span class="text-2xs font-semibold uppercase tracking-wider text-slate-400 block">
                             Detalle registrado por el prefiltro:
                         </span>
                         <ul class="list-disc pl-4 space-y-1 text-xs text-slate-700 leading-relaxed max-h-48 overflow-y-auto" role="list">

@@ -20,6 +20,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
 use Throwable;
@@ -319,15 +320,14 @@ class SolicitudCredencialController extends Controller
             ? SolicitudCredencial::findOrFail((int) $solicitud)
             : SolicitudCredencial::where('numero_oficio', $solicitud)->orWhere('numero_tarjeta', $solicitud)->firstOrFail();
 
-        $user = $request->user();
-        abort_unless(
-            $user && (
-                $user->role === 'superadmin' ||
-                ($solicitudModel->usuario_responsable_id !== null && (int) $solicitudModel->usuario_responsable_id === (int) $user->id)
-            ),
-            403,
-            'No cuenta con autorización para dictaminar el prefiltro en este expediente.'
-        );
+        $this->autorizarDictamen($request, $solicitudModel, 'No cuenta con autorización para dictaminar el prefiltro en este expediente.');
+
+        // Reejecutar tras el envío reescribiría estado_tramite y borraría el avance de impresión.
+        if ($solicitudModel->estado_general === 'enviada_impresion') {
+            return back()->withErrors([
+                'prefiltro' => 'La solicitud ya fue enviada a impresión; el prefiltro no puede reejecutarse.',
+            ]);
+        }
 
         try {
             $resultado = $prefiltroService->evaluate($solicitudModel, $request->user());
@@ -344,6 +344,70 @@ class SolicitudCredencialController extends Controller
         return redirect()
             ->route('credencializacion.detalle', $solicitudModel->id)
             ->with('status', "Prefiltro ejecutado exitosamente. {$resultado['total_elementos']} elementos evaluados: {$resultado['total_aptos']} aptos y {$resultado['total_descartados']} descartados.");
+    }
+
+    /**
+     * Autorización humana posterior al prefiltro: libera la tarjeta de trabajo hacia la cola de impresión.
+     */
+    public function enviarAImpresion(Request $request, string $solicitud): RedirectResponse
+    {
+        $solicitudModel = is_numeric($solicitud)
+            ? SolicitudCredencial::findOrFail((int) $solicitud)
+            : SolicitudCredencial::where('numero_oficio', $solicitud)->orWhere('numero_tarjeta', $solicitud)->firstOrFail();
+
+        $this->autorizarDictamen($request, $solicitudModel, 'No cuenta con autorización para enviar este expediente a impresión.');
+
+        $resultado = DB::transaction(function () use ($solicitudModel): array|string {
+            // Bloqueo pesimista contra envíos duplicados concurrentes.
+            $locked = SolicitudCredencial::whereKey($solicitudModel->id)->lockForUpdate()->firstOrFail();
+
+            if ($locked->estado_general === 'enviada_impresion') {
+                return 'La solicitud ya fue enviada a impresión.';
+            }
+            if ($locked->estado_general !== 'evaluada' || $locked->fecha_prefiltro === null) {
+                return 'Debe ejecutar el prefiltro antes de enviar la solicitud a impresión.';
+            }
+
+            $aptos = $locked->elementos()->where('resultado_prefiltro', 'Apto')->count();
+            if ($aptos === 0) {
+                return 'La solicitud no tiene elementos aptos para enviar a impresión.';
+            }
+
+            $locked->estado_general = 'enviada_impresion';
+            $locked->save();
+
+            return ['aptos' => $aptos, 'tarjeta' => $locked->numero_tarjeta];
+        });
+
+        if (is_string($resultado)) {
+            return back()->withErrors(['envio' => $resultado]);
+        }
+
+        // shortcut: bitácora en el log de la aplicación; sin columnas de envío en solicitudes (no se alteró el esquema).
+        Log::info('Solicitud enviada a impresión', [
+            'solicitud_id' => $solicitudModel->id,
+            'numero_tarjeta' => $resultado['tarjeta'],
+            'elementos_aptos' => $resultado['aptos'],
+            'usuario_id' => $request->user()?->id,
+            'fecha_envio' => now()->toIso8601String(),
+        ]);
+
+        return redirect()
+            ->route('credencializacion.detalle', $solicitudModel->id)
+            ->with('status', "Tarjeta {$resultado['tarjeta']} enviada a impresión con {$resultado['aptos']} ".($resultado['aptos'] === 1 ? 'elemento apto.' : 'elementos aptos.'));
+    }
+
+    private function autorizarDictamen(Request $request, SolicitudCredencial $solicitud, string $mensaje): void
+    {
+        $user = $request->user();
+        abort_unless(
+            $user && (
+                $user->role === 'superadmin' ||
+                ($solicitud->usuario_responsable_id !== null && (int) $solicitud->usuario_responsable_id === (int) $user->id)
+            ),
+            403,
+            $mensaje
+        );
     }
 }
 

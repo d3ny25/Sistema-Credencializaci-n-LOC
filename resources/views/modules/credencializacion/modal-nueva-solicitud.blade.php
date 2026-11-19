@@ -233,7 +233,7 @@
                                 class="w-full text-left px-3 py-2 hover:bg-inst-50 hover:text-inst-900 transition flex items-start justify-between gap-2 border-b border-slate-50 last:border-0"
                             >
                                 <span class="font-medium text-slate-800" x-text="item.nombre"></span>
-                                <span class="inline-block shrink-0 px-1.5 py-0.5 bg-slate-100 text-slate-700 font-mono text-[10px] rounded border border-slate-200" x-text="item.clave"></span>
+                                <span class="inline-block shrink-0 px-1.5 py-0.5 bg-slate-100 text-slate-700 font-mono text-2xs rounded border border-slate-200" x-text="item.clave"></span>
                             </button>
                         </template>
                     </div>

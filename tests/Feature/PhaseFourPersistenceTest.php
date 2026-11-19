@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Enums\EstadoEmision;
 use App\Models\CredencialEmitida;
 use App\Models\LocArma;
 use App\Models\LocPersona;
@@ -111,7 +112,7 @@ class PhaseFourPersistenceTest extends TestCase
             'folio' => 'FOL-1001',
             'numero_tarjeta' => $solicitud->numero_tarjeta,
             'estado_biometria' => 'completo',
-            'estado_emision' => 'emitido',
+            'estado_emision' => EstadoEmision::EMITIDA->value,
             'estado_entrega' => 'pendiente',
         ]);
 
@@ -120,7 +121,7 @@ class PhaseFourPersistenceTest extends TestCase
             'folio' => 'FOL-1002',
             'numero_tarjeta' => $solicitud->numero_tarjeta,
             'estado_biometria' => 'completo',
-            'estado_emision' => 'emitido',
+            'estado_emision' => EstadoEmision::EMITIDA->value,
             'estado_entrega' => 'pendiente',
         ]);
 

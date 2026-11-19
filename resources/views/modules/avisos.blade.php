@@ -11,8 +11,8 @@
     </div>
 
     <div class="mb-5 grid grid-cols-1 gap-4 sm:grid-cols-3">
-        @foreach (['Total de avisos', 'Sin leer', 'Prioridad alta'] as $label)
-            <div class="rounded-lg border border-slate-200 bg-white p-4 shadow-card"><p class="text-xs text-tx-soft">{{ $label }}</p><p class="mt-2 text-2xl font-semibold text-inst-900">—</p><p class="mt-1 text-xs text-tx-soft">Sin servicio de notificaciones</p></div>
+        @foreach (['Total de avisos' => 'bell', 'Sin leer' => 'inbox', 'Prioridad alta' => 'alert'] as $label => $icono)
+            <x-kpi :label="$label" value="—" hint="Sin servicio de notificaciones" :icon="$icono" tone="neutral"/>
         @endforeach
     </div>
 

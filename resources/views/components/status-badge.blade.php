@@ -63,7 +63,7 @@
     $content = $label ?? ($slot->isNotEmpty() ? $slot : '');
 @endphp
 
-<span {{ $attributes->class(['inline-flex items-center rounded-full font-medium ring-1 ring-inset transition-colors', $config['badge'], $sizes[$size] ?? $sizes['sm']]) }}>
+<span {{ $attributes->class(['inline-flex items-center whitespace-nowrap rounded-full font-medium ring-1 ring-inset transition-colors', $config['badge'], $sizes[$size] ?? $sizes['sm']]) }}>
     @if ($icon)
         <x-icon :name="$icon" class="h-3 w-3 shrink-0" />
     @elseif ($showDot)

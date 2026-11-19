@@ -81,41 +81,41 @@
         />
     @else
         <!-- Métricas resumidas del lote -->
-        <div class="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-{{ ($counts['omitido'] ?? 0) > 0 ? '7' : '6' }}">
-            <div class="rounded-lg border border-slate-200 bg-white p-4 shadow-card">
-                <p class="text-xs font-medium text-tx-soft">Filas analizadas</p>
-                <p class="mt-1 text-2xl font-semibold text-inst-900">{{ number_format($batch->total_leidas) }}</p>
+        <div class="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-3 {{ ($counts['omitido'] ?? 0) > 0 ? 'lg:grid-cols-7' : 'lg:grid-cols-6' }}">
+            <div class="rounded-lg bg-white p-4 shadow-card ring-1 ring-slate-900/5">
+                <p class="min-h-8 text-xs font-medium uppercase tracking-wide text-tx-soft">Filas analizadas</p>
+                <p class="mt-2 text-2xl font-semibold text-inst-900">{{ number_format($batch->total_leidas) }}</p>
             </div>
-            <div class="rounded-lg border border-slate-200 bg-white p-4 shadow-card">
-                <p class="text-xs font-medium text-tx-soft">Nuevas conciliadas</p>
-                <p class="mt-1 text-2xl font-semibold text-emerald-700">{{ number_format($counts['nuevo_conciliado'] ?? 0) }}</p>
-                <p class="mt-1 text-[11px] text-tx-soft">Enlace con personal LOC</p>
+            <div class="rounded-lg bg-white p-4 shadow-card ring-1 ring-slate-900/5">
+                <p class="min-h-8 text-xs font-medium uppercase tracking-wide text-tx-soft">Nuevas conciliadas</p>
+                <p class="mt-2 text-2xl font-semibold text-estado-exito">{{ number_format($counts['nuevo_conciliado'] ?? 0) }}</p>
+                <p class="mt-1 text-xs text-tx-soft">Enlace con personal LOC</p>
             </div>
-            <div class="rounded-lg border border-slate-200 bg-white p-4 shadow-card">
-                <p class="text-xs font-medium text-tx-soft">Sin enlace personal</p>
-                <p class="mt-1 text-2xl font-semibold text-blue-700">{{ number_format($counts['nuevo_sin_enlace'] ?? 0) }}</p>
-                <p class="mt-1 text-[11px] text-tx-soft">Histórico (persona_id = NULL)</p>
+            <div class="rounded-lg bg-white p-4 shadow-card ring-1 ring-slate-900/5">
+                <p class="min-h-8 text-xs font-medium uppercase tracking-wide text-tx-soft">Sin enlace personal</p>
+                <p class="mt-2 text-2xl font-semibold text-estado-info">{{ number_format($counts['nuevo_sin_enlace'] ?? 0) }}</p>
+                <p class="mt-1 text-xs text-tx-soft">Histórico (persona_id = NULL)</p>
             </div>
-            <div class="rounded-lg border border-slate-200 bg-white p-4 shadow-card">
-                <p class="text-xs font-medium text-tx-soft">Cancelaciones</p>
-                <p class="mt-1 text-2xl font-semibold text-amber-700">{{ number_format($counts['cancelacion'] ?? 0) }}</p>
-                <p class="mt-1 text-[11px] text-tx-soft">Revisión de trámite requerida</p>
+            <div class="rounded-lg bg-white p-4 shadow-card ring-1 ring-slate-900/5">
+                <p class="min-h-8 text-xs font-medium uppercase tracking-wide text-tx-soft">Cancelaciones</p>
+                <p class="mt-2 text-2xl font-semibold text-amber-800">{{ number_format($counts['cancelacion'] ?? 0) }}</p>
+                <p class="mt-1 text-xs text-tx-soft">Revisión de trámite requerida</p>
             </div>
-            <div class="rounded-lg border border-slate-200 bg-white p-4 shadow-card">
-                <p class="text-xs font-medium text-tx-soft">Sin cambios / Act.</p>
-                <p class="mt-1 text-2xl font-semibold text-slate-700">{{ number_format(($counts['sin_cambios'] ?? 0) + ($counts['actualizar'] ?? 0)) }}</p>
-                <p class="mt-1 text-[11px] text-tx-soft">Preexistentes en base</p>
+            <div class="rounded-lg bg-white p-4 shadow-card ring-1 ring-slate-900/5">
+                <p class="min-h-8 text-xs font-medium uppercase tracking-wide text-tx-soft">Sin cambios / Act.</p>
+                <p class="mt-2 text-2xl font-semibold text-tx-soft">{{ number_format(($counts['sin_cambios'] ?? 0) + ($counts['actualizar'] ?? 0)) }}</p>
+                <p class="mt-1 text-xs text-tx-soft">Preexistentes en base</p>
             </div>
-            <div class="rounded-lg border border-slate-200 bg-white p-4 shadow-card">
-                <p class="text-xs font-medium text-tx-soft">Errores estructurales</p>
-                <p class="mt-1 text-2xl font-semibold text-estado-error">{{ number_format($structuralErrors) }}</p>
-                <p class="mt-1 text-[11px] text-tx-soft">{{ $structuralErrors > 0 ? 'Bloquean confirmación' : 'Sin bloqueos' }}</p>
+            <div class="rounded-lg bg-white p-4 shadow-card ring-1 ring-slate-900/5">
+                <p class="min-h-8 text-xs font-medium uppercase tracking-wide text-tx-soft">Errores estructurales</p>
+                <p class="mt-2 text-2xl font-semibold text-estado-error">{{ number_format($structuralErrors) }}</p>
+                <p class="mt-1 text-xs text-tx-soft">{{ $structuralErrors > 0 ? 'Bloquean confirmación' : 'Sin bloqueos' }}</p>
             </div>
             @if (($counts['omitido'] ?? 0) > 0)
-                <div class="rounded-lg border border-slate-200 bg-white p-4 shadow-card">
-                    <p class="text-xs font-medium text-tx-soft">Omitidas formalmente</p>
-                    <p class="mt-1 text-2xl font-semibold text-purple-700">{{ number_format($counts['omitido']) }}</p>
-                    <p class="mt-1 text-[11px] text-tx-soft">Excluidas de inserción registral</p>
+                <div class="rounded-lg bg-white p-4 shadow-card ring-1 ring-slate-900/5">
+                    <p class="min-h-8 text-xs font-medium uppercase tracking-wide text-tx-soft">Omitidas formalmente</p>
+                    <p class="mt-2 text-2xl font-semibold text-purple-700">{{ number_format($counts['omitido']) }}</p>
+                    <p class="mt-1 text-xs text-tx-soft">Excluidas de inserción registral</p>
                 </div>
             @endif
         </div>
@@ -184,7 +184,7 @@
                         </label>
                     </div>
                     <div class="flex items-end gap-2">
-                        <button type="submit" class="rounded-md bg-inst-900 px-3 py-2 text-sm font-medium text-white hover:bg-inst-700">Filtrar</button>
+                        <button type="submit" class="rounded-md bg-inst-700 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-inst-900 focus:outline-none focus:ring-2 focus:ring-inst-700 focus:ring-offset-1">Filtrar</button>
                         <a href="{{ route('gestion.vigencias.importaciones.preview', $batch) }}"
                            data-clear-filters="{{ route('gestion.vigencias.importaciones.preview', $batch) }}"
                            class="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 hover:bg-slate-100">Limpiar</a>

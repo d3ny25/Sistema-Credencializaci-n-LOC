@@ -53,7 +53,7 @@ class SolicitudRegistroEImportacionPhaseTwoTwoTest extends TestCase
 
     public function test_01_creacion_correcta_de_una_solicitud(): void
     {
-        $user = User::factory()->create();
+        $user = User::factory()->create(['role' => 'credencializador']);
         $this->actingAs($user);
 
         $response = $this->post(route('credencializacion.store'), [
@@ -85,7 +85,7 @@ class SolicitudRegistroEImportacionPhaseTwoTwoTest extends TestCase
 
     public function test_02_rechazo_de_tarjetas_y_oficios_duplicados(): void
     {
-        $user = User::factory()->create();
+        $user = User::factory()->create(['role' => 'credencializador']);
         $this->actingAs($user);
 
         // Intento de envío manual de número de tarjeta por el cliente (prohibido)
@@ -114,7 +114,7 @@ class SolicitudRegistroEImportacionPhaseTwoTwoTest extends TestCase
 
     public function test_03_rechazo_de_campos_obligatorios_e_invalidos(): void
     {
-        $user = User::factory()->create();
+        $user = User::factory()->create(['role' => 'credencializador']);
         $this->actingAs($user);
 
         // Campos vacíos
@@ -138,7 +138,7 @@ class SolicitudRegistroEImportacionPhaseTwoTwoTest extends TestCase
 
     public function test_04_importacion_correcta_xlsx_y_xls(): void
     {
-        $user = User::factory()->create();
+        $user = User::factory()->create(['role' => 'credencializador']);
         $this->actingAs($user);
 
         $solicitudXlsx = SolicitudCredencial::create([
@@ -187,7 +187,7 @@ class SolicitudRegistroEImportacionPhaseTwoTwoTest extends TestCase
 
     public function test_05_conservacion_de_filas_con_cuip_vacio(): void
     {
-        $user = User::factory()->create();
+        $user = User::factory()->create(['role' => 'credencializador']);
         $this->actingAs($user);
 
         $solicitud = SolicitudCredencial::create([
@@ -222,7 +222,7 @@ class SolicitudRegistroEImportacionPhaseTwoTwoTest extends TestCase
 
     public function test_06_conservacion_de_cuip_duplicados_sin_fusionar_registros(): void
     {
-        $user = User::factory()->create();
+        $user = User::factory()->create(['role' => 'credencializador']);
         $this->actingAs($user);
 
         $solicitud = SolicitudCredencial::create([
@@ -255,7 +255,7 @@ class SolicitudRegistroEImportacionPhaseTwoTwoTest extends TestCase
 
     public function test_07_conservacion_del_numero_de_fila_original_y_datos_originales(): void
     {
-        $user = User::factory()->create();
+        $user = User::factory()->create(['role' => 'credencializador']);
         $this->actingAs($user);
 
         $solicitud = SolicitudCredencial::create([
@@ -314,7 +314,7 @@ class SolicitudRegistroEImportacionPhaseTwoTwoTest extends TestCase
 
     public function test_09_rechazo_seguro_de_archivos_ilegibles_o_de_estructura_ambigua(): void
     {
-        $user = User::factory()->create();
+        $user = User::factory()->create(['role' => 'credencializador']);
         $this->actingAs($user);
 
         $solicitud = SolicitudCredencial::create([
@@ -391,7 +391,7 @@ class SolicitudRegistroEImportacionPhaseTwoTwoTest extends TestCase
 
     public function test_11_prevencion_de_cargas_duplicadas_accidentales(): void
     {
-        $user = User::factory()->create();
+        $user = User::factory()->create(['role' => 'credencializador']);
         $this->actingAs($user);
 
         $solicitud = SolicitudCredencial::create([
@@ -443,7 +443,7 @@ class SolicitudRegistroEImportacionPhaseTwoTwoTest extends TestCase
 
     public function test_13_interfaz_muestra_elementos_cargados_y_filas(): void
     {
-        $user = User::factory()->create();
+        $user = User::factory()->create(['role' => 'credencializador']);
         $this->actingAs($user);
 
         $solicitud = SolicitudCredencial::create([
@@ -490,7 +490,7 @@ class SolicitudRegistroEImportacionPhaseTwoTwoTest extends TestCase
 
     public function test_14_importacion_con_cabeceras_desplazadas_y_filas_preambulo_como_ejemplo_de_solicitud(): void
     {
-        $user = User::factory()->create();
+        $user = User::factory()->create(['role' => 'credencializador']);
         $this->actingAs($user);
 
         $solicitud = SolicitudCredencial::create([

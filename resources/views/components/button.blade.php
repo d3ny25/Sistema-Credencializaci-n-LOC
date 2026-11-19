@@ -11,20 +11,22 @@
 ])
 
 @php
-    $baseStyles = 'inline-flex items-center justify-center font-semibold rounded-md transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 select-none';
+    // Mismas clases que el marcado directo (resources/css/app.css · .btn-*): una sola apariencia.
+    $baseStyles = 'btn';
 
     $variants = [
-        'primary' => 'bg-inst-700 text-white shadow-sm hover:bg-inst-900 active:bg-inst-900 focus-visible:outline-inst-700 disabled:bg-slate-200 disabled:text-slate-500 disabled:shadow-none disabled:cursor-not-allowed',
-        'secondary' => 'border border-slate-300 bg-white text-tx shadow-sm hover:bg-slate-50 active:bg-slate-100 focus-visible:outline-inst-700 disabled:bg-slate-100 disabled:text-slate-400 disabled:border-slate-200 disabled:shadow-none disabled:cursor-not-allowed',
-        'success' => 'bg-estado-exito text-white shadow-sm hover:bg-emerald-800 active:bg-emerald-900 focus-visible:outline-emerald-700 disabled:bg-slate-200 disabled:text-slate-500 disabled:shadow-none disabled:cursor-not-allowed',
-        'warning' => 'bg-estado-adv text-white shadow-sm hover:bg-amber-700 active:bg-amber-800 focus-visible:outline-amber-600 disabled:bg-slate-200 disabled:text-slate-500 disabled:shadow-none disabled:cursor-not-allowed',
-        'danger' => 'bg-estado-error text-white shadow-sm hover:bg-red-800 active:bg-red-900 focus-visible:outline-red-700 disabled:bg-slate-200 disabled:text-slate-500 disabled:shadow-none disabled:cursor-not-allowed',
+        'primary' => 'btn-primary',
+        'secondary' => 'btn-secondary',
+        'ghost' => 'btn-ghost',
+        'success' => 'btn-success',
+        'warning' => 'btn-warning',
+        'danger' => 'btn-danger',
     ];
 
     $sizes = [
-        'sm' => 'px-3 py-1.5 text-xs gap-1.5',
-        'md' => 'px-4 py-2 text-sm gap-2',
-        'lg' => 'px-5 py-2.5 text-base gap-2.5',
+        'sm' => 'btn-sm',
+        'md' => '',
+        'lg' => 'btn-lg',
     ];
 
     $iconSizes = [

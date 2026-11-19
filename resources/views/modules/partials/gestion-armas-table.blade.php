@@ -1,16 +1,16 @@
 @if ($rows->count())
     <div class="overflow-x-auto rounded-lg ring-1 ring-slate-900/5">
         <table class="min-w-full divide-y divide-slate-100 text-left text-sm">
-            <thead class="bg-slate-50/80 text-xs uppercase tracking-wide text-tx-soft">
+            <thead class="bg-slate-50/80 text-left text-xs font-semibold uppercase tracking-wide text-tx-soft">
                 <tr>
-                    <th scope="col" class="whitespace-nowrap px-3 py-3">Fila</th>
-                    <th scope="col" class="whitespace-nowrap px-3 py-3">ID externo</th>
-                    <th scope="col" class="whitespace-nowrap px-3 py-3">Matrícula</th>
-                    <th scope="col" class="whitespace-nowrap px-3 py-3">Marca</th>
-                    <th scope="col" class="whitespace-nowrap px-3 py-3">Calibre</th>
-                    <th scope="col" class="whitespace-nowrap px-3 py-3">Modelo</th>
-                    <th scope="col" class="whitespace-nowrap px-3 py-3">Acción / motivo</th>
-                    <th scope="col" class="whitespace-nowrap px-3 py-3">Origen completo</th>
+                    <th scope="col" class="whitespace-nowrap px-4 py-3">Fila</th>
+                    <th scope="col" class="whitespace-nowrap px-4 py-3">ID externo</th>
+                    <th scope="col" class="whitespace-nowrap px-4 py-3">Matrícula</th>
+                    <th scope="col" class="whitespace-nowrap px-4 py-3">Marca</th>
+                    <th scope="col" class="whitespace-nowrap px-4 py-3">Calibre</th>
+                    <th scope="col" class="whitespace-nowrap px-4 py-3">Modelo</th>
+                    <th scope="col" class="whitespace-nowrap px-4 py-3">Acción / motivo</th>
+                    <th scope="col" class="whitespace-nowrap px-4 py-3">Origen completo</th>
                 </tr>
             </thead>
             <tbody class="divide-y divide-slate-100">
@@ -22,13 +22,13 @@
                         $diffs = is_array($row->datos['diferencias'] ?? null) ? $row->datos['diferencias'] : [];
                     @endphp
                     <tr class="align-top hover:bg-slate-50/60">
-                        <td class="whitespace-nowrap px-3 py-3 text-slate-500">{{ $row->numero_fila ?? '—' }}</td>
-                        <td class="whitespace-nowrap px-3 py-3 font-mono text-slate-700">{{ $fields['id_armamento'] ?? '—' }}</td>
-                        <td class="whitespace-nowrap px-3 py-3 font-mono font-medium text-slate-900">{{ $fields['matricula'] ?? '—' }}</td>
-                        <td class="px-3 py-3 text-slate-700">{{ $fields['marca'] ?? '—' }}</td>
-                        <td class="px-3 py-3 text-slate-700">{{ $fields['calibre'] ?? '—' }}</td>
-                        <td class="px-3 py-3 text-slate-700">{{ $fields['modelo'] ?? '—' }}</td>
-                        <td class="min-w-64 px-3 py-3">
+                        <td class="whitespace-nowrap px-4 py-3 text-tx-soft">{{ $row->numero_fila ?? '—' }}</td>
+                        <td class="whitespace-nowrap px-4 py-3 font-mono text-tx">{{ $fields['id_armamento'] ?? '—' }}</td>
+                        <td class="whitespace-nowrap px-4 py-3 font-mono font-medium text-tx">{{ $fields['matricula'] ?? '—' }}</td>
+                        <td class="px-4 py-3 text-tx">{{ $fields['marca'] ?? '—' }}</td>
+                        <td class="px-4 py-3 text-tx">{{ $fields['calibre'] ?? '—' }}</td>
+                        <td class="px-4 py-3 text-tx">{{ $fields['modelo'] ?? '—' }}</td>
+                        <td class="min-w-48 px-4 py-3">
                             @php
                                 $armasBadgeTone = match ($row->accion) {
                                     'nuevo' => 'success',
@@ -73,13 +73,13 @@
                                         <form method="POST" action="{{ route('gestion.armamento.importaciones.omitir', [$batch, $row]) }}" class="mt-2 space-y-2 rounded bg-slate-50 p-2">
                                             @csrf
                                             <input type="text" name="motivo" placeholder="Motivo de exclusión..." required minlength="5" class="w-full rounded border border-slate-300 px-2 py-1 text-xs text-tx">
-                                            <button type="submit" class="rounded bg-slate-700 px-2 py-1 text-xs font-medium text-white hover:bg-slate-900">Confirmar exclusión</button>
+                                            <button type="submit" class="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-tx shadow-sm hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-inst-700 focus:ring-offset-1">Confirmar exclusión</button>
                                         </form>
                                     </details>
                                 @endif
                             @endif
                         </td>
-                        <td class="min-w-48 px-3 py-3">
+                        <td class="min-w-40 px-4 py-3">
                             <details>
                                 <summary class="cursor-pointer text-inst-700 hover:text-inst-900 focus:outline-none focus:ring-2 focus:ring-inst-700">{{ count($source) }} columnas · ver origen completo</summary>
                                 <dl class="mt-2 space-y-1 text-xs">
@@ -94,7 +94,7 @@
             </tbody>
         </table>
     </div>
-    <div class="mt-4 border-t border-slate-200 pt-3">
+    <div class="mt-4 border-t border-slate-100 pt-3">
         {{ $rows->links() }}
     </div>
 @else

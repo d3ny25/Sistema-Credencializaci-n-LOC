@@ -4,6 +4,50 @@
      stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
      aria-hidden="true">
     @switch($name)
+        @case('camera')
+            <path d="M3 8.5A2.5 2.5 0 0 1 5.5 6h1.7l1.3-2h7l1.3 2h1.7A2.5 2.5 0 0 1 21 8.5v9A2.5 2.5 0 0 1 18.5 20h-13A2.5 2.5 0 0 1 3 17.5z"/>
+            <circle cx="12" cy="13" r="3.5"/>
+            @break
+        @case('pen')
+            <path d="M12 20h9"/>
+            <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/>
+            @break
+        @case('copy')
+            <rect x="9" y="9" width="12" height="12" rx="2"/>
+            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+            @break
+        @case('refresh')
+            <path d="M21 12a9 9 0 0 1-15.5 6.2L3 16"/>
+            <path d="M3 12A9 9 0 0 1 18.5 5.8L21 8"/>
+            <path d="M21 3v5h-5"/>
+            <path d="M3 21v-5h5"/>
+            @break
+        @case('eye')
+            <path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/>
+            <circle cx="12" cy="12" r="3"/>
+            @break
+        @case('device')
+            <rect x="4" y="4" width="16" height="12" rx="2"/>
+            <path d="M8 20h8"/>
+            <path d="M12 16v4"/>
+            @break
+        @case('logout')
+            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+            <path d="m16 17 5-5-5-5"/>
+            <path d="M21 12H9"/>
+            @break
+        @case('chevronRight')
+            <path d="m9 18 6-6-6-6"/>
+            @break
+        @case('user')
+            <circle cx="12" cy="8" r="4"/>
+            <path d="M4 21a8 8 0 0 1 16 0"/>
+            @break
+        @case('layers')
+            <path d="m12 2 10 5-10 5L2 7z"/>
+            <path d="m2 17 10 5 10-5"/>
+            <path d="m2 12 10 5 10-5"/>
+            @break
         @case('shield')
             <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
             @break

@@ -27,7 +27,7 @@ class SolicitudPrefiltroRemediationTest extends TestCase
 
     private function setupOfficialSources(): array
     {
-        $user = User::factory()->create();
+        $user = User::factory()->create(['role' => 'credencializador']);
 
         $personalBatch = LocImportBatch::create([
             'tipo_fuente' => 'personal_autorizado_loc',
@@ -560,7 +560,7 @@ class SolicitudPrefiltroRemediationTest extends TestCase
     {
         $this->setupOfficialSources();
         $service = app(SolicitudPrefiltroService::class);
-        $user = User::factory()->create();
+        $user = User::factory()->create(['role' => 'credencializador']);
 
         $solicitud = SolicitudCredencial::create([
             'numero_tarjeta' => 'TARJ-REM-10',
@@ -766,7 +766,7 @@ class SolicitudPrefiltroRemediationTest extends TestCase
     {
         $this->setupOfficialSources();
         $service = app(SolicitudPrefiltroService::class);
-        $user = User::factory()->create();
+        $user = User::factory()->create(['role' => 'credencializador']);
 
         $solicitud = SolicitudCredencial::create([
             'numero_tarjeta' => 'TARJ-HIST-REAL',

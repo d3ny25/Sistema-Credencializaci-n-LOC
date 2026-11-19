@@ -19,8 +19,7 @@ class SharedVisualComponentsTest extends TestCase
         $view = $this->blade('<x-button>Guardar cambios</x-button>');
 
         $view->assertSee('Guardar cambios');
-        $view->assertSee('bg-inst-700');
-        $view->assertSee('text-white');
+        $view->assertSee('btn btn-primary');
         $view->assertSee('type="button"', false);
     }
 
@@ -28,32 +27,29 @@ class SharedVisualComponentsTest extends TestCase
     {
         $secondary = $this->blade('<x-button variant="secondary">Cancelar</x-button>');
         $secondary->assertSee('Cancelar');
-        $secondary->assertSee('border-slate-300');
-        $secondary->assertSee('bg-white');
+        $secondary->assertSee('btn-secondary');
 
         $danger = $this->blade('<x-button variant="danger">Eliminar registro</x-button>');
         $danger->assertSee('Eliminar registro');
-        $danger->assertSee('bg-estado-error');
-        $danger->assertSee('hover:bg-red-800');
+        $danger->assertSee('btn-danger');
 
         $success = $this->blade('<x-button variant="success">Aprobar solicitud</x-button>');
         $success->assertSee('Aprobar solicitud');
-        $success->assertSee('bg-estado-exito');
+        $success->assertSee('btn-success');
 
         $warning = $this->blade('<x-button variant="warning">Revisar advertencia</x-button>');
         $warning->assertSee('Revisar advertencia');
-        $warning->assertSee('bg-estado-adv');
+        // Ámbar 700: el ámbar institucional con texto blanco no alcanza AA (2.3:1).
+        $warning->assertSee('btn-warning');
     }
 
     public function test_button_renders_different_sizes(): void
     {
         $sm = $this->blade('<x-button size="sm">Pequeño</x-button>');
-        $sm->assertSee('text-xs');
-        $sm->assertSee('px-3 py-1.5');
+        $sm->assertSee('btn-sm');
 
         $lg = $this->blade('<x-button size="lg">Grande</x-button>');
-        $lg->assertSee('text-base');
-        $lg->assertSee('px-5 py-2.5');
+        $lg->assertSee('btn-lg');
     }
 
     public function test_button_preserves_html_attributes_and_supports_submit_type(): void
@@ -72,7 +68,8 @@ class SharedVisualComponentsTest extends TestCase
         $view = $this->blade('<x-button :disabled="true">Inactivo</x-button>');
 
         $view->assertSee('disabled', false);
-        $view->assertSee('disabled:cursor-not-allowed');
+        // El estilo deshabilitado vive en .btn (resources/css/app.css).
+        $view->assertSee('class="btn btn-primary"', false);
     }
 
     public function test_button_renders_as_anchor_link_when_href_provided(): void
@@ -169,7 +166,8 @@ class SharedVisualComponentsTest extends TestCase
 
         $view->assertSee('Observación (1 motivo)');
         $view->assertSee('bg-amber-50');
-        $view->assertSee('text-estado-adv');
+        // Ámbar 800 como texto: el ámbar institucional da 2.3:1 sobre blanco (no alcanza AA).
+        $view->assertSee('text-amber-800');
     }
 
     public function test_reason_badge_escapes_html_in_reasons_to_prevent_xss(): void
@@ -418,7 +416,7 @@ class SharedVisualComponentsTest extends TestCase
 
     public function test_credencializacion_list_view_renders_module_tabs_metrics_and_modal(): void
     {
-        $user = \App\Models\User::factory()->create();
+        $user = \App\Models\User::factory()->create(['role' => 'credencializador']);
 
         $response = $this->actingAs($user)->get(route('credencializacion'));
 
@@ -447,7 +445,7 @@ class SharedVisualComponentsTest extends TestCase
 
     public function test_credencializacion_detail_view_renders_module_tabs_and_file_dropzone(): void
     {
-        $user = \App\Models\User::factory()->create();
+        $user = \App\Models\User::factory()->create(['role' => 'credencializador']);
         $solicitud = \App\Models\SolicitudCredencial::create([
             'numero_tarjeta' => 'TAR-MOD-001',
             'numero_oficio' => 'OF-MOD-001',
@@ -475,7 +473,7 @@ class SharedVisualComponentsTest extends TestCase
 
     public function test_credencializacion_detail_view_renders_reason_badge_for_discarded_elements(): void
     {
-        $user = \App\Models\User::factory()->create();
+        $user = \App\Models\User::factory()->create(['role' => 'credencializador']);
         $solicitud = \App\Models\SolicitudCredencial::create([
             'numero_tarjeta' => 'TAR-MOD-002',
             'numero_oficio' => 'OF-MOD-002',

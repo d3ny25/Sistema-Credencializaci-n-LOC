@@ -16,14 +16,15 @@ class ExampleTest extends TestCase
 
     public function test_dashboard_shows_the_institutional_base_screen(): void
     {
-        $response = $this->get(route('dashboard'));
+        $response = $this->actingAs(User::factory()->create())->get(route('dashboard'));
 
         $response
             ->assertOk()
             ->assertSee('Personas en la LOC')
-            ->assertSee('Gestión de información')
             ->assertSee('Avance del proceso')
-            ->assertSee('Sin avisos disponibles');
+            ->assertSee('Solicitudes recientes')
+            // El menú solo ofrece módulos que la ruta permite: sin rol no hay Gestión.
+            ->assertDontSee('>Gestión de información</span>', false);
     }
 
     public function test_dashboard_indicators_use_persisted_record_counts(): void
@@ -43,9 +44,17 @@ class ExampleTest extends TestCase
         }
 
         $request = SolicitudCredencial::query()->firstOrFail();
-        foreach (range(1, 4) as $index) {
+        // 3 sin evaluar, 4 aptos (1 pendiente de biometría, 2 listos para impresión), 1 descartado.
+        $elementos = [
+            [null, 'pendiente'], [null, 'pendiente'], [null, 'pendiente'],
+            ['Apto', 'pendiente_biometrico'], ['Apto', 'listo_impresion'], ['Apto', 'listo_impresion'], ['Apto', 'apto'],
+            ['Descartado', 'descartado'],
+        ];
+        foreach ($elementos as [$resultado, $estado]) {
             SolicitudElemento::query()->create([
                 'solicitud_id' => $request->id,
+                'resultado_prefiltro' => $resultado,
+                'estado_tramite' => $estado,
             ]);
         }
 
@@ -56,22 +65,30 @@ class ExampleTest extends TestCase
             ]);
         }
 
-        $this->get(route('dashboard'))
+        $this->actingAs(User::factory()->create())->get(route('dashboard'))
             ->assertOk()
             ->assertSeeInOrder([
-                'Personas en la LOC',
-                '2',
-                'Registros persistidos',
-                'Solicitudes recibidas',
-                '3',
-                'Solicitudes persistidas',
-                'Elementos en solicitudes',
-                '4',
-                'Elementos persistidos',
-                'Credenciales registradas',
-                '5',
-                'Incluye cualquier estado de emisión',
+                'Solicitudes recibidas', '3', 'Solicitudes persistidas',
+                'Elementos en validación', '3', 'Sin resultado de prefiltro',
+                'Aptos para impresión', '4', 'Resultado de prefiltro apto',
+                'Descartados', '1', 'Resultado de prefiltro descartado',
+                'Pendientes de biometría', '1',
+                'Listos para impresión', '2',
+                'Credenciales registradas', '5', 'Incluye cualquier estado de emisión',
+                'Personas en la LOC', '2', 'Registros persistidos',
+                // Barras: evaluados 5/8, aptos 4/5, listos 2/4, credenciales 5/4 (tope 100).
+                'Evaluados en prefiltro', '63%',
+                'Aptos sobre evaluados', '80%',
+                'Listos para impresión', '50%',
+                'Credenciales registradas', '100%',
             ]);
+    }
+
+    public function test_dashboard_progress_bars_are_zero_without_records(): void
+    {
+        $this->actingAs(User::factory()->create())->get(route('dashboard'))
+            ->assertOk()
+            ->assertSeeInOrder(['Evaluados en prefiltro', '0%', 'Aptos sobre evaluados', '0%']);
     }
 
     public function test_root_redirects_to_the_dashboard(): void
@@ -81,13 +98,15 @@ class ExampleTest extends TestCase
 
     public function test_module_screens_render_with_the_shared_institutional_layout(): void
     {
+        // Credencialización e impresión exigen sesión desde la Fase 0.
+        $this->actingAs(User::factory()->create(['role' => 'superadmin']));
+
         $routes = [
             ['credencializacion', []],
             ['credencializacion.detalle', ['solicitud' => 'referencia']],
             ['impresion', []],
             ['impresion.biometricos', []],
             ['consultas', []],
-            ['consultas.expediente', ['elemento' => 'referencia']],
             ['reportes', []],
             ['avisos', []],
             ['perfil', []],

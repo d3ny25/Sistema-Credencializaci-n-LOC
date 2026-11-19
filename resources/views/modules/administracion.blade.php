@@ -7,8 +7,9 @@
 @section('content')
     @include('modules.devices._admin_tabs', ['active' => $section])
 
-    <div class="mb-5 rounded-lg border border-inst-100 bg-inst-50/70 p-4 text-sm leading-6 text-inst-900">
-        Las pantallas administrativas conservan su estructura, pero sus acciones están deshabilitadas: no hay un flujo de autenticación o persistencia para usuarios, roles, catálogos, avisos o bitácora. La Gestión de dispositivos requiere una sesión autenticada y el permiso de consulta correspondiente.
+    <div class="alert alert-info mb-5 leading-6">
+        <x-icon name="info" class="mt-1 h-4 w-4 shrink-0"/>
+        <span>Las pantallas administrativas conservan su estructura, pero sus acciones están deshabilitadas: aún no existe un flujo de gestión ni de persistencia para usuarios, roles, catálogos, avisos o bitácora. La Gestión de dispositivos requiere una sesión autenticada y el permiso de consulta correspondiente.</span>
     </div>
 
     @switch($section)

@@ -178,26 +178,26 @@
     @if (!in_array($batch->estado, ['pendiente', 'procesando'], true))
     <div class="grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-7">
         @foreach ([
-            'nuevo' => ['Nuevos', 'text-emerald-700'],
-            'actualizar' => ['Por actualizar', 'text-blue-700'],
-            'sin_cambios' => ['Sin cambios', 'text-slate-700'],
-            'rechazado' => ['Rechazados', 'text-red-700'],
-            'conflicto' => ['CUIP duplicado', 'text-orange-700'],
-            'pendiente' => ['Pendientes', 'text-amber-700'],
+            'nuevo' => ['Nuevos', 'text-estado-exito'],
+            'actualizar' => ['Por actualizar', 'text-estado-info'],
+            'sin_cambios' => ['Sin cambios', 'text-tx-soft'],
+            'rechazado' => ['Rechazados', 'text-estado-error'],
+            'conflicto' => ['CUIP duplicado', 'text-amber-800'],
+            'pendiente' => ['Pendientes', 'text-amber-800'],
         ] as $key => $meta)
             <div class="rounded-lg bg-white p-4 shadow-card ring-1 ring-slate-900/5">
-                <div class="text-xs font-medium text-tx-soft">{{ $meta[0] }}</div>
+                <div class="min-h-8 text-xs font-medium uppercase tracking-wide text-tx-soft">{{ $meta[0] }}</div>
                 <div class="mt-2 text-2xl font-semibold {{ $meta[1] }}">{{ number_format((int) ($counts[$key] ?? 0)) }}</div>
             </div>
         @endforeach
         <div class="rounded-lg bg-white p-4 shadow-card ring-1 ring-slate-900/5">
-            <div class="text-xs font-medium text-tx-soft">CUIP ausente</div>
+            <div class="min-h-8 text-xs font-medium uppercase tracking-wide text-tx-soft">CUIP ausente</div>
             <div class="mt-2 text-2xl font-semibold text-estado-error">{{ number_format($missingCuipCount) }}</div>
         </div>
     </div>
 
     @if ($blockingErrors > 0)
-        <div class="mt-6 rounded-xl border border-red-200 bg-red-50 p-4 shadow-sm" role="alert">
+        <div class="mt-6 rounded-lg border border-red-200 bg-red-50 p-4" role="alert">
             <div class="flex flex-wrap items-center justify-between gap-3">
                 <div class="flex items-center gap-3">
                     <div class="rounded-full bg-red-100 p-2 text-red-700">
@@ -222,7 +222,7 @@
             </div>
         </div>
     @else
-        <div class="mt-6 rounded-xl border border-emerald-200 bg-emerald-50 p-4 shadow-sm">
+        <div class="mt-6 rounded-lg border border-emerald-200 bg-emerald-50 p-4">
             <div class="flex items-center gap-3">
                 <div class="rounded-full bg-emerald-100 p-2 text-emerald-700">
                     <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -238,20 +238,20 @@
     @endif
 
     @if ((empty($actionFilter) || in_array($actionFilter, ['requieren_correccion', 'conflicto', 'rechazado'], true) || $onlyErrors) && $exceptionRows->total() > 0)
-    <section id="excepciones" class="mt-6 scroll-mt-6 rounded-xl border border-red-200 bg-white shadow-sm" aria-labelledby="loc-exceptions-heading">
+    <section id="excepciones" class="mt-6 scroll-mt-6 rounded-lg bg-white shadow-card ring-1 ring-red-600/20" aria-labelledby="loc-exceptions-heading">
         <div class="flex flex-wrap items-start justify-between gap-3 border-b border-red-100 px-5 py-4">
             <div>
-                <h2 id="loc-exceptions-heading" class="font-semibold text-slate-900">Filas que requieren corrección</h2>
-                <p class="mt-1 text-sm text-slate-500">
+                <h2 id="loc-exceptions-heading" class="text-sm font-semibold text-inst-900">Filas que requieren corrección</h2>
+                <p class="mt-1 text-sm text-tx-soft">
                     {{ number_format($exceptionRows->total()) }} fila(s) rechazadas o en conflicto. Las filas válidas del lote pueden confirmarse; estas excepciones no se aplicarán.
                 </p>
             </div>
-            <a href="{{ route('gestion.importaciones.preview', $batch) }}" class="rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50">Ver todas las filas</a>
+            <a href="{{ route('gestion.importaciones.preview', $batch) }}" class="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-tx shadow-sm hover:bg-slate-50">Ver todas las filas</a>
         </div>
         @if ($exceptionRows->count())
             <div class="overflow-x-auto">
-                <table class="min-w-full divide-y divide-slate-200 text-sm">
-                    <thead class="bg-red-50 text-left text-xs uppercase tracking-wide text-slate-500">
+                <table class="min-w-full divide-y divide-slate-100 text-sm">
+                    <thead class="bg-red-50/60 text-left text-xs font-semibold uppercase tracking-wide text-tx-soft">
                         <tr>
                             <th class="px-4 py-3">Fila Excel</th>
                             <th class="px-4 py-3">CUIP</th>
@@ -292,7 +292,7 @@
                                             <form method="POST" action="{{ route('gestion.importaciones.omitir', [$batch, $exceptionRow]) }}" class="mt-2 space-y-2 rounded bg-slate-50 p-2">
                                                 @csrf
                                                 <input type="text" name="motivo" placeholder="Motivo de exclusión..." required minlength="5" class="w-full rounded border border-slate-300 px-2 py-1 text-xs text-slate-800">
-                                                <button type="submit" class="rounded bg-slate-700 px-2 py-1 text-xs font-medium text-white hover:bg-slate-900">Confirmar exclusión</button>
+                                                <button type="submit" class="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-tx shadow-sm hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-inst-700 focus:ring-offset-1">Confirmar exclusión</button>
                                             </form>
                                         </details>
                                     @endif
@@ -304,19 +304,19 @@
             </div>
             <div class="border-t border-slate-200 px-4 py-3">{{ $exceptionRows->links() }}</div>
         @else
-            <p class="px-5 py-6 text-sm text-slate-500">No hay filas rechazadas ni conflictos en este lote.</p>
+            <p class="px-5 py-6 text-sm text-tx-soft">No hay filas rechazadas ni conflictos en este lote.</p>
         @endif
     </section>
     @endif
 
-    <div class="mt-6 rounded-xl border border-slate-200 bg-white shadow-sm"
+    <div class="mt-6 rounded-lg bg-white shadow-card ring-1 ring-slate-900/5"
          x-data="importPreviewManager({ url: '{{ route('gestion.importaciones.preview', $batch) }}' })">
-        <div class="border-b border-slate-200 px-5 py-4">
-            <h2 class="font-semibold text-slate-900">Detalle por fila</h2>
+        <div class="border-b border-slate-100 px-5 py-4">
+            <h2 class="text-sm font-semibold text-inst-900">Detalle por fila</h2>
             @if ($onlyErrors)
                 <p class="mt-1 text-sm text-amber-800">Mostrando únicamente filas rechazadas o en conflicto. <a href="{{ route('gestion.importaciones.preview', $batch) }}" class="font-medium underline">Ver todas las filas</a></p>
             @endif
-            <p class="mt-1 text-sm text-slate-500">{{ number_format($batch->total_leidas) }} filas leídas; {{ number_format($batch->total_aceptadas) }} válidas y {{ number_format($batch->total_rechazadas) }} rechazadas o en conflicto. Las filas rechazadas o en conflicto no se aplicarán.</p>
+            <p class="mt-1 text-sm text-tx-soft">{{ number_format($batch->total_leidas) }} filas leídas; {{ number_format($batch->total_aceptadas) }} válidas y {{ number_format($batch->total_rechazadas) }} rechazadas o en conflicto. Las filas rechazadas o en conflicto no se aplicarán.</p>
         </div>
 
         <div class="p-5">
@@ -355,7 +355,7 @@
                     </select>
                 </div>
                 <div class="flex items-end gap-2">
-                    <button type="submit" class="rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800">
+                    <button type="submit" class="rounded-md bg-inst-700 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-inst-900 focus:outline-none focus:ring-2 focus:ring-inst-700 focus:ring-offset-1">
                         Buscar
                     </button>
                     <a href="{{ route('gestion.importaciones.preview', $batch) }}"
@@ -385,7 +385,7 @@
         </div>
     </div>
 
-    <div class="mt-6 flex flex-wrap items-center justify-between gap-4 rounded-xl border border-amber-200 bg-amber-50 p-4">
+    <div class="mt-6 flex flex-wrap items-center justify-between gap-4 rounded-lg border border-amber-200 bg-amber-50 p-4">
         <p class="max-w-3xl text-sm text-amber-900">
             @if ($batch->estado === 'fallido_parcial')
                 La ejecución anterior se detuvo: {{ number_format($applicationCounts['insertado'] ?? 0) }} insertadas, {{ number_format($applicationCounts['actualizado'] ?? 0) }} actualizadas y {{ number_format($applicationCounts['sin_cambios'] ?? 0) }} sin cambios. Puedes reanudarla; los bloques confirmados se conservan y las filas pendientes se revalidan por CUIP.

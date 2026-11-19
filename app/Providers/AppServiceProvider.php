@@ -53,6 +53,57 @@ class AppServiceProvider extends ServiceProvider
             return in_array($user->role, ['superadmin', 'admin', 'administrador', 'supervisor', 'credencializador', 'impresion'], true);
         });
 
+        // Credencialización: expedientes con CUIP, nombres y armamento de los elementos.
+        Gate::define('access-credencializacion', static function (User $user) use ($isLocalDemo): bool {
+            if ((bool) $user->getAttribute('local_demo_access') || $user->role === 'local_demo' || $isLocalDemo($user)) {
+                return false;
+            }
+
+            return in_array($user->role, ['superadmin', 'credencializador', 'operador'], true);
+        });
+
+        // Cola de impresión: consulta de elementos aptos (nombres, CUIP, estado biométrico).
+        Gate::define('access-print-queue', static function (User $user) use ($isLocalDemo): bool {
+            if ((bool) $user->getAttribute('local_demo_access') || $user->role === 'local_demo' || $isLocalDemo($user)) {
+                return false;
+            }
+
+            return in_array($user->role, ['superadmin', 'impresion', 'operador'], true);
+        });
+
+        // Registro de emisión y reimpresión física de credenciales.
+        Gate::define('print-credentials', static function (User $user) use ($isLocalDemo): bool {
+            if ((bool) $user->getAttribute('local_demo_access') || $user->role === 'local_demo' || $isLocalDemo($user)) {
+                return false;
+            }
+
+            return in_array($user->role, ['superadmin', 'impresion'], true);
+        });
+
+        // Entrega y seguimiento (consulta). Provisional hasta definir roles de entrega: quien ya consulta estas
+        // mismas tarjetas en Credencialización o en Impresión. Ambos gates excluyen el acceso de demostración.
+        Gate::define('access-entregas', static fn (User $user): bool => Gate::forUser($user)->allows('access-credencializacion')
+            || Gate::forUser($user)->allows('access-print-queue'));
+
+        // Fase 1B.2: consulta de evidencia biométrica histórica fuera de la vista de impresión.
+        // Restringida a superadministrador hasta la decisión institucional sobre roles autorizados.
+        Gate::define('view-biometric-evidence', static fn (User $user): bool => $isSuperAdministrator($user));
+
+        // Fase 1B.2: rectificación de resultados de impresión y resolución de incidencias de duplicado.
+        Gate::define('supervise-print-evidence', static fn (User $user): bool => $isSuperAdministrator($user));
+
+        // Entrega y seguimiento, Iteración 1.3: registro de entregas físicas (escritura). Ningún rol existente tiene
+        // ese significado: restringido a superadministrador hasta que se defina el rol institucional de entrega.
+        Gate::define('deliver-credentials', static fn (User $user): bool => $isSuperAdministrator($user));
+
+        // Iteración 1.4: incorporar documentos al expediente documental (escritura; la consulta usa access-entregas).
+        // Sin rol institucional definido: superadministrador, como deliver-credentials.
+        Gate::define('manage-delivery-documents', static fn (User $user): bool => $isSuperAdministrator($user));
+
+        // Consultas (C0): búsqueda transversal de padrón, armamento y tarjetas. Provisional: solo superadministrador;
+        // los permisos de Credencialización o Impresión no implican consultar personal y armamento de todo el estado.
+        Gate::define('access-consultas', static fn (User $user): bool => $isSuperAdministrator($user));
+
         Storage::extend('safe-local-readonly', static function ($app, array $config) {
             $root = $config['root'] ?? null;
             if ($root === null || trim((string) $root) === '') {

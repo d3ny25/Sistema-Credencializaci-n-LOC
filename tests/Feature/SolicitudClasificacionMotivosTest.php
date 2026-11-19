@@ -36,7 +36,7 @@ class SolicitudClasificacionMotivosTest extends TestCase
     {
         parent::setUp();
 
-        $this->user = User::factory()->create();
+        $this->user = User::factory()->create(['role' => 'credencializador']);
 
         $this->personalBatch = LocImportBatch::create([
             'tipo_fuente' => 'personal_autorizado_loc',

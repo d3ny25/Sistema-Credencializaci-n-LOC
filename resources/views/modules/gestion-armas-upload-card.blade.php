@@ -4,12 +4,12 @@
     </div>
 
     @unless ($weapons_import_schema_ready)
-        <div class="rounded-md border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950" role="alert">
+        <div class="alert alert-warning" role="alert">
             La importación no está habilitada: falta revisar y aplicar la migración incremental 2026_10_22_000001 en un entorno autorizado.
         </div>
     @else
         @if (auth()->user()?->getAttribute('local_demo_access'))
-            <div class="rounded-md border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900" role="status">
+            <div class="alert alert-warning" role="status">
                 El modo demo es de solo lectura. Se requiere una cuenta administrativa real para analizar el archivo.
             </div>
         @else
@@ -48,7 +48,7 @@
                 <div class="mt-auto flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-4">
                     <p class="max-w-xl text-xs leading-5 text-tx-soft">El análisis no cambia el inventario. Los registros existentes nunca se sobrescriben; matrículas vacías, duplicadas o con datos distintos quedan bloqueadas para revisión.</p>
                     <button id="weapons-upload-submit" type="submit"
-                        class="inline-flex items-center justify-center gap-2 rounded-md bg-inst-700 px-4 py-2 text-sm font-medium text-white shadow-sm transition-colors hover:bg-inst-900 focus:outline-none focus:ring-2 focus:ring-inst-700 focus:ring-offset-1 disabled:cursor-wait disabled:opacity-70">
+                        class="btn btn-primary disabled:cursor-wait">
                         <svg id="weapons-upload-spinner" class="hidden h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none" aria-hidden="true">
                             <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
                             <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"/>

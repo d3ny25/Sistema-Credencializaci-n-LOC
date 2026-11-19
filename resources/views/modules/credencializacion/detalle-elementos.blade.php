@@ -22,25 +22,25 @@
         {{-- Banner de error accesible en caso de fallo AJAX / 422 / 500 --}}
         <div x-show="errorMessage"
              x-cloak
-             class="mb-3 rounded-lg border border-rose-200 bg-rose-50 p-3 text-xs text-rose-800 flex items-center justify-between shadow-2xs">
+             class="mb-3 rounded-lg border border-red-200 bg-red-50 p-3 text-xs text-red-800 flex items-center justify-between shadow-card">
             <div class="flex items-center gap-2">
-                <svg class="h-4 w-4 text-rose-600 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <svg class="h-4 w-4 text-red-600 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
                 </svg>
                 <span x-text="errorMessage"></span>
             </div>
             <div class="flex items-center gap-2">
-                <button type="button" @click="submitForm()" class="font-semibold text-rose-700 hover:text-rose-900 underline text-[11px]">
+                <button type="button" @click="submitForm()" class="font-semibold text-estado-error hover:text-red-900 underline text-[11px]">
                     Reintentar
                 </button>
-                <button type="button" @click="errorMessage = null" class="text-rose-400 hover:text-rose-600 font-bold ml-1 text-sm leading-none">
+                <button type="button" @click="errorMessage = null" class="text-red-400 hover:text-red-600 font-bold ml-1 text-sm leading-none">
                     ×
                 </button>
             </div>
         </div>
 
         {{-- Barra de herramientas de filtros y búsqueda (Fase 2E) --}}
-        <div class="mb-4 rounded-lg border border-slate-200/90 bg-slate-50/70 p-3 sm:p-3.5 shadow-2xs">
+        <div class="mb-4 rounded-lg border border-slate-200/90 bg-slate-50/70 p-3 sm:p-3.5 shadow-card">
             <form x-ref="filterForm"
                   @submit.prevent="submitForm"
                   method="GET"
@@ -50,11 +50,11 @@
                 <div class="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-12">
                     {{-- Búsqueda 'q' (CUIP, Persona, Matrícula, Adscripción) --}}
                     <div class="sm:col-span-2 xl:col-span-5">
-                        <label for="filter-q" class="block text-[10px] sm:text-[11px] font-semibold uppercase tracking-wider text-tx-soft mb-1">
+                        <label for="filter-q" class="block text-2xs sm:text-[11px] font-semibold uppercase tracking-wider text-tx-soft mb-1">
                             Búsqueda general
                         </label>
                         <div class="relative">
-                            <span class="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-2.5 text-slate-400">
+                            <span class="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-2.5 text-tx-soft">
                                 <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                                     <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
                                 </svg>
@@ -65,14 +65,14 @@
                                    value="{{ request('q') }}"
                                    placeholder="Buscar por CUIP, nombre, matrícula, adscripción..."
                                    maxlength="100"
-                                   class="h-8 sm:h-9 w-full rounded-md border border-slate-300 bg-white pl-8 pr-7 text-xs text-slate-800 shadow-2xs focus:border-inst-500 focus:outline-none focus:ring-2 focus:ring-inst-500/20 placeholder:text-slate-400">
+                                   class="h-8 sm:h-9 w-full rounded-md border border-slate-300 bg-white pl-8 pr-7 text-xs text-tx shadow-card focus:border-inst-700 focus:outline-none focus:ring-2 focus:ring-inst-700/20 placeholder:text-tx-soft">
                             @if(request('q'))
                                 @php
                                     $clearQUrl = route('credencializacion.detalle', array_merge(['solicitud' => $solicitud->id], request()->except('q', 'page')));
                                 @endphp
                                 <a href="{{ $clearQUrl }}"
                                    data-chip-url="{{ $clearQUrl }}"
-                                   class="absolute inset-y-0 right-0 flex items-center pr-2 text-slate-400 hover:text-slate-600 transition"
+                                   class="absolute inset-y-0 right-0 flex items-center pr-2 text-tx-soft hover:text-tx-soft transition"
                                    title="Borrar término de búsqueda">
                                     <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
                                 </a>
@@ -82,12 +82,12 @@
 
                     {{-- Filtro Prefiltro --}}
                     <div class="xl:col-span-3">
-                        <label for="filter-prefiltro" class="block text-[10px] sm:text-[11px] font-semibold uppercase tracking-wider text-tx-soft mb-1">
+                        <label for="filter-prefiltro" class="block text-2xs sm:text-[11px] font-semibold uppercase tracking-wider text-tx-soft mb-1">
                             Resultado prefiltro
                         </label>
                         <select id="filter-prefiltro"
                                 name="prefiltro"
-                                class="h-8 sm:h-9 w-full rounded-md border border-slate-300 bg-white px-2.5 text-xs text-slate-800 shadow-2xs focus:border-inst-500 focus:outline-none focus:ring-2 focus:ring-inst-500/20">
+                                class="h-8 sm:h-9 w-full rounded-md border border-slate-300 bg-white px-2.5 text-xs text-tx shadow-card focus:border-inst-700 focus:outline-none focus:ring-2 focus:ring-inst-700/20">
                             <option value="">Todos los resultados</option>
                             <option value="aptos" {{ strtolower((string)request('prefiltro')) === 'aptos' ? 'selected' : '' }}>
                                 Aptos ({{ $solicitud->total_aptos }})
@@ -103,12 +103,12 @@
 
                     {{-- Filtro Motivo de Descarte (14 sustantivos + 1 técnico + histórico) --}}
                     <div class="xl:col-span-4">
-                        <label for="filter-motivo" class="block text-[10px] sm:text-[11px] font-semibold uppercase tracking-wider text-tx-soft mb-1">
+                        <label for="filter-motivo" class="block text-2xs sm:text-[11px] font-semibold uppercase tracking-wider text-tx-soft mb-1">
                             Motivo de descarte
                         </label>
                         <select id="filter-motivo"
                                 name="motivo"
-                                class="h-8 sm:h-9 w-full rounded-md border border-slate-300 bg-white px-2.5 text-xs text-slate-800 shadow-2xs focus:border-inst-500 focus:outline-none focus:ring-2 focus:ring-inst-500/20 truncate">
+                                class="h-8 sm:h-9 w-full rounded-md border border-slate-300 bg-white px-2.5 text-xs text-tx shadow-card focus:border-inst-700 focus:outline-none focus:ring-2 focus:ring-inst-700/20 truncate">
                             <option value="">Todos los motivos</option>
                             <option value="historico" {{ request('motivo') === 'historico' ? 'selected' : '' }}>
                                 [Histórico] Sin clasificar o residual
@@ -127,12 +127,12 @@
                     <div class="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
                         {{-- Agrupamiento Estado --}}
                         <div>
-                            <label for="filter-agrupamiento" class="block text-[10px] sm:text-[11px] font-semibold uppercase tracking-wider text-tx-soft mb-1">
+                            <label for="filter-agrupamiento" class="block text-2xs sm:text-[11px] font-semibold uppercase tracking-wider text-tx-soft mb-1">
                                 Agrupamiento institucional
                             </label>
                             <select id="filter-agrupamiento"
                                     name="agrupamiento"
-                                    class="h-8 sm:h-9 w-full rounded-md border border-slate-300 bg-white px-2.5 text-xs text-slate-800 shadow-2xs focus:border-inst-500 focus:outline-none focus:ring-2 focus:ring-inst-500/20">
+                                    class="h-8 sm:h-9 w-full rounded-md border border-slate-300 bg-white px-2.5 text-xs text-tx shadow-card focus:border-inst-700 focus:outline-none focus:ring-2 focus:ring-inst-700/20">
                                 <option value="">Todos los estados</option>
                                 <option value="verificado" {{ strtolower((string)request('agrupamiento')) === 'verificado' ? 'selected' : '' }}>Clave verificada</option>
                                 <option value="sin_clave" {{ strtolower((string)request('agrupamiento')) === 'sin_clave' ? 'selected' : '' }}>Texto origen sin clave</option>
@@ -144,7 +144,7 @@
 
                         {{-- Clave Específica de Catálogo --}}
                         <div>
-                            <label for="filter-clave" class="block text-[10px] sm:text-[11px] font-semibold uppercase tracking-wider text-tx-soft mb-1">
+                            <label for="filter-clave" class="block text-2xs sm:text-[11px] font-semibold uppercase tracking-wider text-tx-soft mb-1">
                                 Clave institucional
                             </label>
                             <input type="text"
@@ -153,17 +153,17 @@
                                    value="{{ request('clave') }}"
                                    placeholder="Ej. A302, A1, B210..."
                                    maxlength="50"
-                                   class="h-8 sm:h-9 w-full rounded-md border border-slate-300 bg-white px-3 text-xs text-slate-800 shadow-2xs focus:border-inst-500 focus:outline-none focus:ring-2 focus:ring-inst-500/20 placeholder:text-slate-400 font-mono uppercase">
+                                   class="h-8 sm:h-9 w-full rounded-md border border-slate-300 bg-white px-3 text-xs text-tx shadow-card focus:border-inst-700 focus:outline-none focus:ring-2 focus:ring-inst-700/20 placeholder:text-tx-soft font-mono uppercase">
                         </div>
 
                         {{-- Arma Corta --}}
                         <div>
-                            <label for="filter-arma-corta" class="block text-[10px] sm:text-[11px] font-semibold uppercase tracking-wider text-tx-soft mb-1">
+                            <label for="filter-arma-corta" class="block text-2xs sm:text-[11px] font-semibold uppercase tracking-wider text-tx-soft mb-1">
                                 Arma corta
                             </label>
                             <select id="filter-arma-corta"
                                     name="arma_corta"
-                                    class="h-8 sm:h-9 w-full rounded-md border border-slate-300 bg-white px-2.5 text-xs text-slate-800 shadow-2xs focus:border-inst-500 focus:outline-none focus:ring-2 focus:ring-inst-500/20">
+                                    class="h-8 sm:h-9 w-full rounded-md border border-slate-300 bg-white px-2.5 text-xs text-tx shadow-card focus:border-inst-700 focus:outline-none focus:ring-2 focus:ring-inst-700/20">
                                 <option value="">Todas las condiciones</option>
                                 <option value="con_arma" {{ request('arma_corta') === 'con_arma' || request('arma_corta') === 'solicitada' ? 'selected' : '' }}>Con arma solicitada</option>
                                 <option value="sin_arma" {{ request('arma_corta') === 'sin_arma' ? 'selected' : '' }}>Sin arma solicitada</option>
@@ -174,12 +174,12 @@
 
                         {{-- Arma Larga --}}
                         <div>
-                            <label for="filter-arma-larga" class="block text-[10px] sm:text-[11px] font-semibold uppercase tracking-wider text-tx-soft mb-1">
+                            <label for="filter-arma-larga" class="block text-2xs sm:text-[11px] font-semibold uppercase tracking-wider text-tx-soft mb-1">
                                 Arma larga
                             </label>
                             <select id="filter-arma-larga"
                                     name="arma_larga"
-                                    class="h-8 sm:h-9 w-full rounded-md border border-slate-300 bg-white px-2.5 text-xs text-slate-800 shadow-2xs focus:border-inst-500 focus:outline-none focus:ring-2 focus:ring-inst-500/20">
+                                    class="h-8 sm:h-9 w-full rounded-md border border-slate-300 bg-white px-2.5 text-xs text-tx shadow-card focus:border-inst-700 focus:outline-none focus:ring-2 focus:ring-inst-700/20">
                                 <option value="">Todas las condiciones</option>
                                 <option value="con_arma" {{ request('arma_larga') === 'con_arma' || request('arma_larga') === 'solicitada' ? 'selected' : '' }}>Con arma solicitada</option>
                                 <option value="sin_arma" {{ request('arma_larga') === 'sin_arma' ? 'selected' : '' }}>Sin arma solicitada</option>
@@ -195,7 +195,7 @@
                     <div class="flex items-center gap-2">
                         <button type="submit"
                                 :disabled="isLoading"
-                                class="inline-flex items-center gap-1.5 rounded-md bg-inst-700 px-3 py-1.5 text-xs font-semibold text-white shadow-2xs hover:bg-inst-800 disabled:opacity-50 disabled:cursor-not-allowed transition">
+                                class="inline-flex items-center gap-1.5 rounded-md bg-inst-700 px-3 py-1.5 text-xs font-semibold text-white shadow-card hover:bg-inst-900 disabled:opacity-50 disabled:cursor-not-allowed transition">
                             <svg x-show="!isLoading" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
                             <svg x-show="isLoading" x-cloak class="animate-spin h-3.5 w-3.5 text-white" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
                             <span x-text="isLoading ? 'Filtrando...' : 'Filtrar'">Filtrar</span>
@@ -203,14 +203,14 @@
 
                         <button type="button"
                                 @click="showAdvanced = !showAdvanced"
-                                class="inline-flex items-center gap-1.5 rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 shadow-2xs hover:bg-slate-50 transition">
+                                class="inline-flex items-center gap-1.5 rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 shadow-card hover:bg-slate-50 transition">
                             <span x-text="showAdvanced ? 'Menos filtros' : 'Más filtros (Agrupamiento / Armas)'"></span>
-                            <svg class="h-3.5 w-3.5 text-slate-400 transition-transform duration-200" :class="showAdvanced ? 'rotate-180' : ''" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>
+                            <svg class="h-3.5 w-3.5 text-tx-soft transition-transform duration-200" :class="showAdvanced ? 'rotate-180' : ''" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>
                         </button>
 
                         {{-- Indicador sutil de carga asíncrona --}}
                         <div x-show="isLoading" x-cloak class="hidden sm:inline-flex items-center gap-1.5 text-xs text-inst-700 font-medium pl-1">
-                            <span class="h-2 w-2 rounded-full bg-inst-600 animate-pulse"></span>
+                            <span class="h-2 w-2 rounded-full bg-inst-700 animate-pulse"></span>
                             <span>Actualizando tabla...</span>
                         </div>
                     </div>
@@ -218,7 +218,7 @@
                     <div>
                         <a href="{{ $urlBase }}"
                            data-clear-filters="{{ $urlBase }}"
-                           class="inline-flex items-center gap-1 text-xs font-semibold text-rose-700 hover:text-rose-900 transition">
+                           class="inline-flex items-center gap-1 text-xs font-semibold text-estado-error hover:text-red-900 transition">
                             <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
                             Limpiar filtros
                         </a>
@@ -232,6 +232,62 @@
             </form>
         </div>
 
+        {{-- Operaciones del expediente: acciones sobre la tabla para evitar desplazarse al pie --}}
+        @php
+            $enviadaImpresion = $solicitud->estado_general === 'enviada_impresion';
+            $aptosEnvio = (int) $solicitud->total_aptos;
+            $puedeEnviar = ! $enviadaImpresion && $solicitud->estado_general === 'evaluada' && $solicitud->fecha_prefiltro && $aptosEnvio > 0;
+            $motivoEnvio = match (true) {
+                $enviadaImpresion => 'La tarjeta ya fue autorizada y está en la cola de impresión.',
+                ! $solicitud->fecha_prefiltro || $solicitud->estado_general !== 'evaluada' => 'Ejecute el prefiltro antes de enviar a impresión.',
+                default => 'No hay elementos aptos para enviar a impresión.',
+            };
+        @endphp
+        <div class="mb-3 mt-4 flex flex-wrap items-center justify-between gap-3">
+            <div class="min-w-0">
+                <p class="text-xs font-semibold uppercase tracking-wide text-tx-soft">Operaciones del expediente</p>
+                <p class="mt-0.5 text-xs text-tx-soft">El prefiltro cruza personal, vigencias y armamento oficial. El envío autoriza los elementos aptos para la cola de impresión.</p>
+            </div>
+            <div class="flex flex-wrap items-center gap-2">
+                @if ($solicitud->total_elementos > 0 && ! $enviadaImpresion)
+                    <form method="POST" action="{{ route('credencializacion.prefiltro', $solicitud->id) }}">
+                        @csrf
+                        <button type="submit" title="Motor de prefiltro oficial institucional" @class([
+                            'inline-flex items-center gap-2 rounded-md px-4 py-2 text-sm font-medium shadow-sm transition-colors focus:outline-none focus:ring-2 focus:ring-inst-700 focus:ring-offset-1',
+                            'bg-inst-700 text-white hover:bg-inst-900' => ! $solicitud->fecha_prefiltro,
+                            'border border-slate-300 bg-white text-tx hover:bg-slate-50' => $solicitud->fecha_prefiltro,
+                        ])>
+                            <x-icon name="shield" class="h-4 w-4"/>
+                            {{ $solicitud->fecha_prefiltro ? 'Reejecutar Prefiltro' : 'Ejecutar Prefiltro' }}
+                        </button>
+                    </form>
+                @else
+                    <button type="button" disabled title="{{ $enviadaImpresion ? 'El prefiltro no puede reejecutarse tras el envío a impresión.' : 'Debe cargar elementos de Excel para habilitar el prefiltro.' }}" class="inline-flex items-center gap-2 rounded-md border border-slate-200 bg-slate-100 px-4 py-2 text-sm font-medium text-slate-400 cursor-not-allowed">
+                        <x-icon name="shield" class="h-4 w-4"/>
+                        Ejecutar Prefiltro
+                    </button>
+                @endif
+
+                @if ($enviadaImpresion)
+                    <x-status-badge label="Enviada a impresión" tone="success" size="md" :title="$motivoEnvio"/>
+                @elseif ($puedeEnviar)
+                    <form method="POST" action="{{ route('credencializacion.enviar-impresion', $solicitud->id) }}"
+                          onsubmit="return confirm('¿Desea autorizar y enviar {{ $aptosEnvio === 1 ? 'el elemento apto' : "los {$aptosEnvio} elementos aptos" }} de la tarjeta {{ $solicitud->numero_tarjeta }} a la cola de impresión? Después del envío el prefiltro ya no podrá reejecutarse.');">
+                        @csrf
+                        <button type="submit" class="inline-flex items-center gap-2 rounded-md bg-inst-700 px-4 py-2 text-sm font-medium text-white shadow-sm transition-colors hover:bg-inst-900 focus:outline-none focus:ring-2 focus:ring-inst-700 focus:ring-offset-1">
+                            <x-icon name="printer" class="h-4 w-4"/>
+                            Enviar a impresión ({{ $aptosEnvio }})
+                        </button>
+                    </form>
+                @else
+                    <button type="button" disabled title="{{ $motivoEnvio }}" class="inline-flex items-center gap-2 rounded-md bg-slate-200 px-4 py-2 text-sm font-medium text-slate-500 cursor-not-allowed">
+                        <x-icon name="printer" class="h-4 w-4"/>
+                        Enviar a impresión
+                    </button>
+                @endif
+            </div>
+        </div>
+
         {{-- Contenedor de la Tabla Integrada con Paginación (Contenedor Reactivo AJAX) --}}
         <div x-ref="tableContainer"
              @click="handleContainerClick($event)"
@@ -241,36 +297,6 @@
         </div>
     </x-card>
 
-    {{-- Operaciones del Expediente --}}
-    <div class="mt-4">
-        <x-card title="Operaciones del expediente" description="Evaluación cruzada y continuidad hacia la cola de impresión.">
-            <div class="flex flex-wrap items-center justify-between gap-4">
-                <div>
-                    <p class="text-sm font-semibold text-inst-900">Validación de prefiltro y emisión de credenciales</p>
-                    <p class="text-xs text-tx-soft mt-0.5">El prefiltro cruzará personal, vigencias y armamento oficial. Solo los elementos aptos podrán enviarse a impresión.</p>
-                </div>
-                <div class="flex flex-wrap items-center gap-2.5">
-                    @if ($solicitud->total_elementos > 0)
-                        <form method="POST" action="{{ route('credencializacion.prefiltro', $solicitud->id) }}">
-                            @csrf
-                            <button type="submit" title="Motor de prefiltro oficial institucional" class="inline-flex items-center gap-2 rounded-md bg-inst-700 px-4 py-2 text-xs font-bold text-white shadow-2xs hover:bg-inst-800 transition">
-                                <x-icon name="shield" class="h-4 w-4"/>
-                                {{ $solicitud->fecha_prefiltro ? 'Reejecutar Prefiltro' : 'Ejecutar Prefiltro' }}
-                            </button>
-                        </form>
-                    @else
-                        <button type="button" disabled title="Debe cargar elementos de Excel para habilitar el prefiltro." class="rounded-md bg-slate-200 px-4 py-2 text-xs font-medium text-slate-500 cursor-not-allowed">
-                            Ejecutar Prefiltro
-                        </button>
-                    @endif
-
-                    <button type="button" disabled title="El envío a impresión será implementado en la Fase 2.4." class="rounded-md border border-slate-200 bg-slate-50 px-4 py-2 text-xs font-medium text-slate-400 cursor-not-allowed">
-                        Enviar elementos aptos a impresión · Fase 2.4
-                    </button>
-                </div>
-            </div>
-        </x-card>
-    </div>
 </div>
 
 {{-- Registro del Componente Reactivo en Alpine.js --}}

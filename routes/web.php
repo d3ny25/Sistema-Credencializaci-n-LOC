@@ -1,9 +1,12 @@
 <?php
 
 use App\Http\Controllers\AuthenticatedSessionController;
+use App\Http\Controllers\ConsultaController;
 use App\Http\Controllers\CredentialTemplateController;
 use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\CredencialPreparacionController;
 use App\Http\Controllers\DeviceController;
+use App\Http\Controllers\EntregaSeguimientoController;
 use App\Http\Controllers\LocGestionController;
 use App\Http\Controllers\LocWeaponsImportController;
 use App\Http\Controllers\LocCredentialsImportController;
@@ -26,7 +29,9 @@ Route::post('/logout', [AuthenticatedSessionController::class, 'destroy'])
     ->middleware('auth')
     ->name('logout');
 
-Route::get('/dashboard', DashboardController::class)->name('dashboard');
+Route::get('/dashboard', DashboardController::class)
+    ->middleware([LocalDemoAccess::class, 'auth'])
+    ->name('dashboard');
 
 Route::middleware([LocalDemoAccess::class, 'auth', 'can:access-administration'])->group(function () {
     Route::get('/gestion', [LocGestionController::class, 'index'])->name('gestion');
@@ -75,12 +80,11 @@ Route::middleware([LocalDemoAccess::class, 'auth', 'can:access-administration'])
         ->name('gestion.importaciones.omitir');
 });
 
-Route::get('/credencializacion/solicitudes', [SolicitudCredencialController::class, 'index'])
-    ->name('credencializacion');
-Route::get('/credencializacion/solicitudes/{solicitud}', [SolicitudCredencialController::class, 'show'])
-    ->name('credencializacion.detalle');
-
-Route::middleware([LocalDemoAccess::class, 'auth'])->group(function () {
+Route::middleware([LocalDemoAccess::class, 'auth', 'can:access-credencializacion'])->group(function () {
+    Route::get('/credencializacion/solicitudes', [SolicitudCredencialController::class, 'index'])
+        ->name('credencializacion');
+    Route::get('/credencializacion/solicitudes/{solicitud}', [SolicitudCredencialController::class, 'show'])
+        ->name('credencializacion.detalle');
     Route::get('/credencializacion/catalogo/buscar', [SolicitudCredencialController::class, 'buscarCatalogo'])
         ->name('credencializacion.catalogo.buscar');
     Route::post('/credencializacion/solicitudes', [SolicitudCredencialController::class, 'store'])
@@ -89,13 +93,18 @@ Route::middleware([LocalDemoAccess::class, 'auth'])->group(function () {
         ->name('credencializacion.elementos.subir');
     Route::post('/credencializacion/solicitudes/{solicitud}/prefiltro', [SolicitudCredencialController::class, 'ejecutarPrefiltro'])
         ->name('credencializacion.prefiltro');
+    Route::post('/credencializacion/solicitudes/{solicitud}/enviar-impresion', [SolicitudCredencialController::class, 'enviarAImpresion'])
+        ->name('credencializacion.enviar-impresion');
 });
 
-Route::get('/impresion', [PrintQueueController::class, 'index'])->name('impresion.index');
-Route::get('/impresion/cola', [PrintQueueController::class, 'index'])->name('impresion');
-Route::view('/impresion/biometricos', 'modules.impresion', ['section' => 'biometricos'])->name('impresion.biometricos');
-
 Route::middleware([LocalDemoAccess::class, 'auth'])->group(function () {
+    Route::get('/impresion', [PrintQueueController::class, 'index'])->name('impresion.index');
+    Route::get('/impresion/cola', [PrintQueueController::class, 'index'])->name('impresion');
+    Route::view('/impresion/biometricos', 'modules.impresion', ['section' => 'biometricos'])->name('impresion.biometricos');
+    Route::get('/impresion/plantilla', [CredentialTemplateController::class, 'editor'])
+        ->name('impresion.plantilla');
+    Route::get('/impresion/plantilla/imprimir', [CredentialTemplateController::class, 'printPreview'])
+        ->name('impresion.plantilla.imprimir');
     Route::get('/impresion/tarjetas/{solicitud}/elementos', [PrintQueueController::class, 'elementosPorTarjeta'])
         ->name('impresion.tarjeta.elementos');
     Route::post('/impresion/tarjetas/{solicitud}/validar-biometria', [PrintQueueController::class, 'validarBiometriaPorTarjeta'])
@@ -108,11 +117,42 @@ Route::middleware([LocalDemoAccess::class, 'auth'])->group(function () {
         ->name('impresion.elemento.biometrico.stream');
     Route::post('/impresion/elementos/{elemento}/actualizar-biometrico', [PrintQueueController::class, 'actualizarBiometrico'])
         ->name('impresion.elemento.actualizar-biometrico');
+    Route::post('/impresion/elementos/{elemento}/captura-ticket', [PrintQueueController::class, 'ticketCaptura'])
+        ->name('impresion.elemento.captura-ticket');
+    Route::post('/impresion/elementos/{elemento}/emision', [PrintQueueController::class, 'registrarEmision'])
+        ->name('impresion.elemento.emision');
+    Route::post('/impresion/elementos/{elemento}/reimpresion', [PrintQueueController::class, 'registrarReimpresion'])
+        ->name('impresion.elemento.reimpresion');
+
+    // Fase 1B.2: preparación de impresión con snapshot histórico (biometría, plantilla y datos).
+    Route::post('/impresion/elementos/{elemento}/preparar', [CredencialPreparacionController::class, 'preparar'])
+        ->name('impresion.elemento.preparar');
+    Route::get('/impresion/preparaciones/{preparacion}', [CredencialPreparacionController::class, 'mostrar'])
+        ->whereUuid('preparacion')
+        ->name('impresion.preparacion');
+    Route::get('/impresion/preparaciones/{preparacion}/biometricos/{categoria}', [CredencialPreparacionController::class, 'biometrico'])
+        ->whereUuid('preparacion')
+        ->name('impresion.preparacion.biometrico');
+    Route::get('/impresion/preparaciones/{preparacion}/evidencia/{categoria}', [CredencialPreparacionController::class, 'evidencia'])
+        ->whereUuid('preparacion')
+        ->name('impresion.preparacion.evidencia');
+    Route::post('/impresion/preparaciones/{preparacion}/cancelar', [CredencialPreparacionController::class, 'cancelar'])
+        ->whereUuid('preparacion')
+        ->name('impresion.preparacion.cancelar');
+    // Envío a la impresora y seguimiento de la cola de Windows (no confirman la impresión física).
+    Route::post('/impresion/preparaciones/{preparacion}/trabajo', [CredencialPreparacionController::class, 'autorizarTrabajo'])
+        ->whereUuid('preparacion')
+        ->name('impresion.preparacion.trabajo');
+    Route::post('/impresion/preparaciones/{preparacion}/trabajo/estado', [CredencialPreparacionController::class, 'estadoTrabajo'])
+        ->whereUuid('preparacion')
+        ->name('impresion.preparacion.trabajo.estado');
+    Route::post('/impresion/impresiones/{impresion}/rectificar', [CredencialPreparacionController::class, 'rectificar'])
+        ->whereNumber('impresion')
+        ->name('impresion.impresion.rectificar');
+    Route::post('/impresion/incidencias/{incidencia}/resolver', [CredencialPreparacionController::class, 'resolverIncidencia'])
+        ->whereNumber('incidencia')
+        ->name('impresion.incidencia.resolver');
 });
-Route::get('/impresion/plantilla', [CredentialTemplateController::class, 'editor'])
-    ->name('impresion.plantilla');
-Route::get('/impresion/plantilla/imprimir', [CredentialTemplateController::class, 'printPreview'])
-    ->name('impresion.plantilla.imprimir');
 Route::get('/impresion/plantilla/versiones', [CredentialTemplateController::class, 'versions'])
     ->middleware([LocalDemoAccess::class, 'auth', 'can:view-credential-template-versions'])
     ->name('impresion.plantilla.versiones');
@@ -128,16 +168,43 @@ Route::post('/impresion/plantilla/aprobar/{version}', [CredentialTemplateControl
     ->middleware([LocalDemoAccess::class, 'auth', 'can:approve-credential-templates'])
     ->name('impresion.plantilla.aprobar');
 
-Route::get('/entregas/{section?}', function (?string $section = 'panel') {
-    $sections = ['panel', 'credenciales-recibidas', 'pendientes', 'entregas', 'retenidas', 'confirmaciones', 'conciliacion', 'historial'];
-    abort_unless(in_array($section, $sections, true), 404);
+// Entrega y Seguimiento: navegación por número de tarjeta (el expediente se identifica por el id de la solicitud).
+Route::middleware([LocalDemoAccess::class, 'auth', 'can:access-entregas'])->group(function () {
+    Route::get('/entregas', [EntregaSeguimientoController::class, 'index'])->name('entregas');
+    Route::get('/entregas/tarjetas/{solicitud}/{seccion?}', [EntregaSeguimientoController::class, 'tarjeta'])
+        ->whereNumber('solicitud')
+        ->whereIn('seccion', array_keys(EntregaSeguimientoController::SECCIONES))
+        ->name('entregas.tarjeta');
+    Route::get('/entregas/tarjetas/{solicitud}/entregas/{entrega}', [EntregaSeguimientoController::class, 'detalle'])
+        ->whereNumber(['solicitud', 'entrega'])
+        ->name('entregas.entrega.detalle');
+    // Expediente documental (Iteración 1.4): el archivo solo se sirve si pertenece a la tarjeta de la ruta.
+    Route::get('/entregas/tarjetas/{solicitud}/documentos/{documento}/{modo}', [EntregaSeguimientoController::class, 'documentoArchivo'])
+        ->whereNumber(['solicitud', 'documento'])
+        ->whereIn('modo', ['ver', 'descargar'])
+        ->name('entregas.documento.archivo');
+    Route::post('/entregas/tarjetas/{solicitud}/documentos', [EntregaSeguimientoController::class, 'documentoStore'])
+        ->whereNumber('solicitud')
+        ->middleware('can:manage-delivery-documents')
+        ->name('entregas.documento.store');
 
-    return view('modules.entrega', ['section' => $section]);
-})->name('entregas');
+    // Registro de entregas físicas (Iteración 1.3): escritura con permiso propio, además del de consulta.
+    Route::middleware('can:deliver-credentials')->prefix('/entregas/tarjetas/{solicitud}/entregas')->whereNumber('solicitud')->group(function () {
+        Route::get('/nueva', [EntregaSeguimientoController::class, 'nueva'])->name('entregas.entrega.nueva');
+        Route::post('/confirmar', [EntregaSeguimientoController::class, 'confirmar'])->name('entregas.entrega.confirmar');
+        Route::post('/', [EntregaSeguimientoController::class, 'store'])->name('entregas.entrega.store');
+    });
+});
 
-Route::view('/consultas', 'modules.consultas', ['detail' => false])->name('consultas');
-Route::view('/consultas/expedientes/{elemento}', 'modules.consultas', ['detail' => true])
-    ->name('consultas.expediente');
+// Consultas (C0 + C1): búsqueda de solo lectura; throttle limita la enumeración por fuerza bruta.
+Route::get('/consultas', [ConsultaController::class, 'index'])
+    ->middleware([LocalDemoAccess::class, 'auth', 'can:access-consultas', 'throttle:60,1'])
+    ->name('consultas');
+Route::get('/consultas/elementos/{persona}/{seccion?}', [ConsultaController::class, 'elemento'])
+    ->whereNumber('persona')
+    ->whereIn('seccion', array_keys(\App\Services\ConsultaExpedienteService::SECCIONES))
+    ->middleware([LocalDemoAccess::class, 'auth', 'can:access-consultas', 'throttle:60,1'])
+    ->name('consultas.elemento');
 
 Route::view('/reportes', 'modules.reportes')->name('reportes');
 

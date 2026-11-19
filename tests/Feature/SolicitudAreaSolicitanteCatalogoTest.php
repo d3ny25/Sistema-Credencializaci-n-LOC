@@ -26,7 +26,7 @@ class SolicitudAreaSolicitanteCatalogoTest extends TestCase
     {
         parent::setUp();
 
-        $this->user = User::factory()->create();
+        $this->user = User::factory()->create(['role' => 'credencializador']);
 
         // Crear lote y versión vigente base para las pruebas
         $this->batchVigente = LocImportBatch::create([

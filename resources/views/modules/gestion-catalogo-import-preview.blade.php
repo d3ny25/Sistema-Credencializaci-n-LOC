@@ -93,30 +93,30 @@
     @else
         <!-- Tarjetas de métricas comparativas -->
         <div class="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-            <div class="rounded-lg border border-slate-200 bg-white p-4 shadow-card">
-                <p class="text-xs text-tx-soft">Filas leídas</p>
-                <p class="mt-1 text-2xl font-semibold text-inst-900">{{ number_format($batch->total_leidas) }}</p>
-                <p class="mt-1 text-[11px] text-tx-soft">Registros de datos en Excel</p>
+            <div class="rounded-lg bg-white p-4 shadow-card ring-1 ring-slate-900/5">
+                <p class="min-h-8 text-xs font-medium uppercase tracking-wide text-tx-soft">Filas leídas</p>
+                <p class="mt-2 text-2xl font-semibold text-inst-900">{{ number_format($batch->total_leidas) }}</p>
+                <p class="mt-1 text-xs text-tx-soft">Registros de datos en Excel</p>
             </div>
-            <div class="rounded-lg border border-emerald-200 bg-emerald-50/50 p-4 shadow-card">
-                <p class="text-xs text-emerald-800">Nuevas claves</p>
-                <p class="mt-1 text-2xl font-semibold text-emerald-900">{{ number_format($counts['nuevo'] ?? 0) }}</p>
-                <p class="mt-1 text-[11px] text-emerald-700">Ausentes en versión vigente</p>
+            <div class="rounded-lg bg-white p-4 shadow-card ring-1 ring-slate-900/5">
+                <p class="min-h-8 text-xs font-medium uppercase tracking-wide text-tx-soft">Nuevas claves</p>
+                <p class="mt-2 text-2xl font-semibold text-estado-exito">{{ number_format($counts['nuevo'] ?? 0) }}</p>
+                <p class="mt-1 text-xs text-tx-soft">Ausentes en versión vigente</p>
             </div>
-            <div class="rounded-lg border border-blue-200 bg-blue-50/50 p-4 shadow-card">
-                <p class="text-xs text-blue-800">Actualizaciones</p>
-                <p class="mt-1 text-2xl font-semibold text-blue-900">{{ number_format($counts['actualizar'] ?? 0) }}</p>
-                <p class="mt-1 text-[11px] text-blue-700">Cambio de datos descriptivos</p>
+            <div class="rounded-lg bg-white p-4 shadow-card ring-1 ring-slate-900/5">
+                <p class="min-h-8 text-xs font-medium uppercase tracking-wide text-tx-soft">Actualizaciones</p>
+                <p class="mt-2 text-2xl font-semibold text-estado-info">{{ number_format($counts['actualizar'] ?? 0) }}</p>
+                <p class="mt-1 text-xs text-tx-soft">Cambio de datos descriptivos</p>
             </div>
-            <div class="rounded-lg border border-slate-200 bg-slate-50 p-4 shadow-card">
-                <p class="text-xs text-tx-soft">Sin cambios</p>
-                <p class="mt-1 text-2xl font-semibold text-slate-700">{{ number_format($counts['sin_cambios'] ?? 0) }}</p>
-                <p class="mt-1 text-[11px] text-slate-500">Idénticas a versión vigente</p>
+            <div class="rounded-lg bg-white p-4 shadow-card ring-1 ring-slate-900/5">
+                <p class="min-h-8 text-xs font-medium uppercase tracking-wide text-tx-soft">Sin cambios</p>
+                <p class="mt-2 text-2xl font-semibold text-tx-soft">{{ number_format($counts['sin_cambios'] ?? 0) }}</p>
+                <p class="mt-1 text-xs text-tx-soft">Idénticas a versión vigente</p>
             </div>
-            <div class="rounded-lg border border-red-200 bg-red-50/50 p-4 shadow-card">
-                <p class="text-xs text-red-800">Conflictos / Rechazos</p>
-                <p class="mt-1 text-2xl font-semibold text-red-900">{{ number_format($blockingErrors) }}</p>
-                <p class="mt-1 text-[11px] text-red-700">{{ $blockingErrors > 0 ? 'Bloquean publicación' : 'Ninguno detectado' }}</p>
+            <div class="rounded-lg bg-white p-4 shadow-card ring-1 ring-slate-900/5">
+                <p class="min-h-8 text-xs font-medium uppercase tracking-wide text-tx-soft">Conflictos / Rechazos</p>
+                <p class="mt-2 text-2xl font-semibold text-estado-error">{{ number_format($blockingErrors) }}</p>
+                <p class="mt-1 text-xs text-tx-soft">{{ $blockingErrors > 0 ? 'Bloquean publicación' : 'Ninguno detectado' }}</p>
             </div>
         </div>
 
@@ -137,7 +137,7 @@
                                 Se publicará una versión oficial con {{ number_format($batch->total_aceptadas) }} registros. Las versiones previas se conservarán intactas para auditoría histórica.
                             </p>
                         </div>
-                        <button type="submit" class="shrink-0 rounded-md bg-inst-700 px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-inst-900 focus:outline-none focus:ring-2 focus:ring-inst-700 focus:ring-offset-2">
+                        <button type="submit" class="shrink-0 rounded-md bg-inst-700 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-inst-900 focus:outline-none focus:ring-2 focus:ring-inst-700 focus:ring-offset-2">
                             Confirmar y activar versión
                         </button>
                     </form>
@@ -169,7 +169,7 @@
                     </select>
                 </label>
                 <div class="flex items-end gap-2">
-                    <button type="submit" class="rounded-md bg-inst-900 px-4 py-2 text-sm font-medium text-white hover:bg-inst-700">
+                    <button type="submit" class="rounded-md bg-inst-700 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-inst-900 focus:outline-none focus:ring-2 focus:ring-inst-700 focus:ring-offset-1">
                         Filtrar
                     </button>
                     <a href="{{ route('gestion.catalogo.importaciones.preview', $batch) }}" class="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 hover:bg-slate-100">
@@ -182,45 +182,45 @@
             <div class="mb-4 flex flex-wrap items-center gap-2 border-b border-slate-200 pb-3">
                 <span class="mr-1 text-xs font-semibold uppercase tracking-wider text-tx-soft">Filtro rápido:</span>
                 <a href="{{ route('gestion.catalogo.importaciones.preview', array_merge(request()->except(['accion', 'page']), ['batch' => $batch])) }}"
-                   class="inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium transition-colors {{ empty($action_filter) ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200' }}">
+                   class="inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium transition-colors {{ empty($action_filter) ? 'bg-inst-900 text-white ring-1 ring-inst-900' : 'bg-white text-tx ring-1 ring-slate-200 hover:bg-slate-50' }}">
                     <span>Todos</span>
-                    <span class="rounded-full px-1.5 py-0.5 text-[10px] {{ empty($action_filter) ? 'bg-slate-700 text-white' : 'bg-slate-200 text-slate-600' }}">
+                    <span class="rounded-full px-1.5 py-0.5 text-2xs {{ empty($action_filter) ? 'bg-white/20 text-white' : 'bg-slate-100 text-tx-soft' }}">
                         {{ number_format($batch->total_leidas) }}
                     </span>
                 </a>
                 <a href="{{ route('gestion.catalogo.importaciones.preview', array_merge(request()->except(['accion', 'page']), ['batch' => $batch, 'accion' => 'nuevo'])) }}"
-                   class="inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium transition-colors {{ $action_filter === 'nuevo' ? 'bg-emerald-700 text-white' : 'bg-emerald-50 text-emerald-800 hover:bg-emerald-100' }}">
+                   class="inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium transition-colors {{ $action_filter === 'nuevo' ? 'bg-inst-900 text-white ring-1 ring-inst-900' : 'bg-white text-tx ring-1 ring-slate-200 hover:bg-slate-50' }}">
                     <span>Nuevas claves</span>
-                    <span class="rounded-full px-1.5 py-0.5 text-[10px] {{ $action_filter === 'nuevo' ? 'bg-emerald-800 text-white' : 'bg-emerald-200/70 text-emerald-800' }}">
+                    <span class="rounded-full px-1.5 py-0.5 text-2xs {{ $action_filter === 'nuevo' ? 'bg-white/20 text-white' : 'bg-emerald-50 text-emerald-800' }}">
                         {{ number_format($counts['nuevo'] ?? 0) }}
                     </span>
                 </a>
                 <a href="{{ route('gestion.catalogo.importaciones.preview', array_merge(request()->except(['accion', 'page']), ['batch' => $batch, 'accion' => 'actualizar'])) }}"
-                   class="inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium transition-colors {{ $action_filter === 'actualizar' ? 'bg-blue-700 text-white' : 'bg-blue-50 text-blue-800 hover:bg-blue-100' }}">
+                   class="inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium transition-colors {{ $action_filter === 'actualizar' ? 'bg-inst-900 text-white ring-1 ring-inst-900' : 'bg-white text-tx ring-1 ring-slate-200 hover:bg-slate-50' }}">
                     <span>Actualizaciones</span>
-                    <span class="rounded-full px-1.5 py-0.5 text-[10px] {{ $action_filter === 'actualizar' ? 'bg-blue-800 text-white' : 'bg-blue-200/70 text-blue-800' }}">
+                    <span class="rounded-full px-1.5 py-0.5 text-2xs {{ $action_filter === 'actualizar' ? 'bg-white/20 text-white' : 'bg-blue-50 text-blue-800' }}">
                         {{ number_format($counts['actualizar'] ?? 0) }}
                     </span>
                 </a>
                 <a href="{{ route('gestion.catalogo.importaciones.preview', array_merge(request()->except(['accion', 'page']), ['batch' => $batch, 'accion' => 'sin_cambios'])) }}"
-                   class="inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium transition-colors {{ $action_filter === 'sin_cambios' ? 'bg-slate-700 text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200' }}">
+                   class="inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium transition-colors {{ $action_filter === 'sin_cambios' ? 'bg-inst-900 text-white ring-1 ring-inst-900' : 'bg-white text-tx ring-1 ring-slate-200 hover:bg-slate-50' }}">
                     <span>Sin cambios</span>
-                    <span class="rounded-full px-1.5 py-0.5 text-[10px] {{ $action_filter === 'sin_cambios' ? 'bg-slate-800 text-white' : 'bg-slate-200 text-slate-600' }}">
+                    <span class="rounded-full px-1.5 py-0.5 text-2xs {{ $action_filter === 'sin_cambios' ? 'bg-white/20 text-white' : 'bg-slate-100 text-tx-soft' }}">
                         {{ number_format($counts['sin_cambios'] ?? 0) }}
                     </span>
                 </a>
                 <a href="{{ route('gestion.catalogo.importaciones.preview', array_merge(request()->except(['accion', 'page']), ['batch' => $batch, 'accion' => 'conflicto'])) }}"
-                   class="inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium transition-colors {{ in_array($action_filter, ['conflicto', 'rechazado'], true) ? 'bg-red-700 text-white' : 'bg-red-50 text-red-800 hover:bg-red-100' }}">
+                   class="inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium transition-colors {{ in_array($action_filter, ['conflicto', 'rechazado'], true) ? 'bg-inst-900 text-white ring-1 ring-inst-900' : 'bg-white text-tx ring-1 ring-slate-200 hover:bg-slate-50' }}">
                     <span>Conflictos / Rechazos</span>
-                    <span class="rounded-full px-1.5 py-0.5 text-[10px] {{ in_array($action_filter, ['conflicto', 'rechazado'], true) ? 'bg-red-800 text-white' : 'bg-red-200/70 text-red-800' }}">
+                    <span class="rounded-full px-1.5 py-0.5 text-2xs {{ in_array($action_filter, ['conflicto', 'rechazado'], true) ? 'bg-white/20 text-white' : 'bg-red-50 text-red-800' }}">
                         {{ number_format($blockingErrors) }}
                     </span>
                 </a>
             </div>
 
-            <div class="overflow-x-auto">
-                <table class="min-w-full divide-y divide-slate-200 text-left text-sm">
-                    <thead class="bg-slate-50 text-xs uppercase tracking-wide text-tx-soft">
+            <div class="overflow-x-auto rounded-lg ring-1 ring-slate-900/5">
+                <table class="min-w-full divide-y divide-slate-100 text-left text-xs">
+                    <thead class="bg-slate-50/80 text-left text-xs font-semibold uppercase tracking-wide text-tx-soft">
                         <tr>
                             <th class="px-3 py-2.5"># Fila</th>
                             <th class="px-3 py-2.5">CLAVE</th>
@@ -247,22 +247,22 @@
                                     default => 'neutral',
                                 };
                             @endphp
-                            <tr class="hover:bg-slate-50/80">
-                                <td class="px-3 py-2 text-xs text-tx-soft">{{ $row->numero_fila }}</td>
-                                <td class="px-3 py-2 font-mono text-xs font-semibold text-inst-900">{{ $row->clave_origen ?? '—' }}</td>
-                                <td class="px-3 py-2 text-xs text-slate-800">{{ $d['agrupamiento'] ?? '—' }}</td>
-                                <td class="px-3 py-2 text-xs text-slate-700">{{ $d['municipio'] ?? '—' }}</td>
-                                <td class="px-3 py-2 text-xs text-tx-soft">{{ $d['region'] ?? '—' }}</td>
-                                <td class="px-3 py-2 text-xs text-tx-soft">{{ $d['zona_militar'] ?? '—' }}</td>
-                                <td class="px-3 py-2 text-xs text-tx-soft">{{ $d['batallon'] ?? '—' }}</td>
-                                <td class="px-3 py-2">
+                            <tr class="hover:bg-slate-50/60">
+                                <td class="px-3 py-2.5 text-tx-soft">{{ $row->numero_fila }}</td>
+                                <td class="px-3 py-2.5 font-mono font-semibold text-inst-900">{{ $row->clave_origen ?? '—' }}</td>
+                                <td class="px-3 py-2.5 text-tx">{{ $d['agrupamiento'] ?? '—' }}</td>
+                                <td class="px-3 py-2.5 text-tx">{{ $d['municipio'] ?? '—' }}</td>
+                                <td class="px-3 py-2.5 text-tx-soft">{{ $d['region'] ?? '—' }}</td>
+                                <td class="px-3 py-2.5 text-tx-soft">{{ $d['zona_militar'] ?? '—' }}</td>
+                                <td class="px-3 py-2.5 text-tx-soft">{{ $d['batallon'] ?? '—' }}</td>
+                                <td class="px-3 py-2.5">
                                     <x-status-badge :label="str($row->accion)->replace('_', ' ')->title()" :tone="$badgeTone"/>
                                 </td>
-                                <td class="px-3 py-2 text-xs">
+                                <td class="px-3 py-2.5">
                                     @if ($errs && count($errs) > 0)
-                                        <span class="text-red-700 font-medium">{{ implode(', ', $errs) }}</span>
+                                        <span class="font-medium text-estado-error">{{ implode(', ', $errs) }}</span>
                                     @else
-                                        <span class="text-slate-400">Válido</span>
+                                        <span class="text-tx-soft">Válido</span>
                                     @endif
                                 </td>
                             </tr>

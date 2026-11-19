@@ -99,29 +99,36 @@
         @php
             $rejected = (int) ($counts['rechazado'] ?? 0) + (int) ($counts['conflicto'] ?? 0);
         @endphp
-        <section class="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-6" aria-label="Resultados reales del análisis">
-            <x-card title="Filas leídas">
-                <p class="text-2xl font-semibold text-inst-900">{{ number_format((int) $batch->total_leidas) }}</p>
-            </x-card>
-            <x-card title="Candidatas nuevas">
-                <p class="text-2xl font-semibold text-inst-900">{{ number_format((int) ($counts['nuevo'] ?? 0)) }}</p>
-            </x-card>
-            <x-card title="Actualizaciones">
-                <p class="text-2xl font-semibold text-inst-700">{{ number_format((int) ($counts['actualizar'] ?? 0)) }}</p>
-            </x-card>
-            <x-card title="Conflictos">
-                <p class="text-2xl font-semibold text-estado-adv">{{ number_format((int) ($counts['conflicto'] ?? 0)) }}</p>
-            </x-card>
-            <x-card title="Errores de datos">
-                <p class="text-2xl font-semibold text-estado-error">{{ number_format((int) ($counts['rechazado'] ?? 0)) }}</p>
-            </x-card>
-            <x-card title="Sin cambios">
-                <p class="text-2xl font-semibold text-tx-soft">{{ number_format((int) ($counts['sin_cambios'] ?? 0)) }}</p>
-            </x-card>
+        <section class="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6" aria-label="Resultados reales del análisis">
+            <div class="rounded-lg bg-white p-4 shadow-card ring-1 ring-slate-900/5">
+                <p class="min-h-8 text-xs font-medium uppercase tracking-wide text-tx-soft">Filas leídas</p>
+                <p class="mt-2 text-2xl font-semibold text-inst-900">{{ number_format((int) $batch->total_leidas) }}</p>
+            </div>
+            <div class="rounded-lg bg-white p-4 shadow-card ring-1 ring-slate-900/5">
+                <p class="min-h-8 text-xs font-medium uppercase tracking-wide text-tx-soft">Candidatas nuevas</p>
+                <p class="mt-2 text-2xl font-semibold text-inst-900">{{ number_format((int) ($counts['nuevo'] ?? 0)) }}</p>
+            </div>
+            <div class="rounded-lg bg-white p-4 shadow-card ring-1 ring-slate-900/5">
+                <p class="min-h-8 text-xs font-medium uppercase tracking-wide text-tx-soft">Actualizaciones</p>
+                <p class="mt-2 text-2xl font-semibold text-estado-info">{{ number_format((int) ($counts['actualizar'] ?? 0)) }}</p>
+            </div>
+            <div class="rounded-lg bg-white p-4 shadow-card ring-1 ring-slate-900/5">
+                <p class="min-h-8 text-xs font-medium uppercase tracking-wide text-tx-soft">Conflictos</p>
+                <p class="mt-2 text-2xl font-semibold text-amber-800">{{ number_format((int) ($counts['conflicto'] ?? 0)) }}</p>
+            </div>
+            <div class="rounded-lg bg-white p-4 shadow-card ring-1 ring-slate-900/5">
+                <p class="min-h-8 text-xs font-medium uppercase tracking-wide text-tx-soft">Errores de datos</p>
+                <p class="mt-2 text-2xl font-semibold text-estado-error">{{ number_format((int) ($counts['rechazado'] ?? 0)) }}</p>
+            </div>
+            <div class="rounded-lg bg-white p-4 shadow-card ring-1 ring-slate-900/5">
+                <p class="min-h-8 text-xs font-medium uppercase tracking-wide text-tx-soft">Sin cambios</p>
+                <p class="mt-2 text-2xl font-semibold text-tx-soft">{{ number_format((int) ($counts['sin_cambios'] ?? 0)) }}</p>
+            </div>
             @if ((int) ($counts['omitido'] ?? 0) > 0)
-                <x-card title="Omitidas">
-                    <p class="text-2xl font-semibold text-tx-soft">{{ number_format((int) $counts['omitido']) }}</p>
-                </x-card>
+                <div class="rounded-lg bg-white p-4 shadow-card ring-1 ring-slate-900/5">
+                <p class="min-h-8 text-xs font-medium uppercase tracking-wide text-tx-soft">Omitidas</p>
+                <p class="mt-2 text-2xl font-semibold text-tx-soft">{{ number_format((int) $counts['omitido']) }}</p>
+            </div>
             @endif
         </section>
 
@@ -164,7 +171,7 @@
                         </select>
                     </div>
                     <div class="flex items-end gap-2">
-                        <button type="submit" class="rounded-md bg-inst-900 px-4 py-2 text-sm font-medium text-white hover:bg-inst-700">
+                        <button type="submit" class="rounded-md bg-inst-700 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-inst-900 focus:outline-none focus:ring-2 focus:ring-inst-700 focus:ring-offset-1">
                             Buscar
                         </button>
                         <a href="{{ route('gestion.armamento.importaciones.preview', $batch) }}"

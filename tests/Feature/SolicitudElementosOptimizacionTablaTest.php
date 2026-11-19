@@ -129,8 +129,9 @@ class SolicitudElementosOptimizacionTablaTest extends TestCase
         $this->assertStringContainsString('w-[150px]', $content);
         $this->assertStringContainsString('w-[170px]', $content);
         $this->assertStringContainsString('w-[165px]', $content);
-        $this->assertStringContainsString('w-[125px]', $content);
-        $this->assertStringContainsString('w-[90px]', $content);
+        $this->assertStringContainsString('w-[114px]', $content);
+        $this->assertStringContainsString('w-[112px]', $content);
+        $this->assertStringContainsString('w-[124px]', $content);
     }
 
     /** 02. Prefiltro y motivos: apto muestra ✓ Apto sin motivos inexistentes, descartado muestra botón y sin evaluar muestra Sin evaluar */

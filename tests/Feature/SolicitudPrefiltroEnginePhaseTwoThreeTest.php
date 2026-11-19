@@ -38,7 +38,7 @@ class SolicitudPrefiltroEnginePhaseTwoThreeTest extends TestCase
      */
     private function setupOfficialSources(): array
     {
-        $user = User::factory()->create();
+        $user = User::factory()->create(['role' => 'credencializador']);
 
         $personalBatch = LocImportBatch::create([
             'tipo_fuente' => 'personal_autorizado_loc',
@@ -734,7 +734,7 @@ class SolicitudPrefiltroEnginePhaseTwoThreeTest extends TestCase
         $response->assertRedirect('/login');
 
         // Intento con usuario autenticado responsable
-        $user = User::factory()->create();
+        $user = User::factory()->create(['role' => 'credencializador']);
         $solicitud->usuario_responsable_id = $user->id;
         $solicitud->save();
         $this->actingAs($user);
@@ -748,7 +748,7 @@ class SolicitudPrefiltroEnginePhaseTwoThreeTest extends TestCase
     {
         $this->setupOfficialSources();
         $service = app(SolicitudPrefiltroService::class);
-        $user = User::factory()->create();
+        $user = User::factory()->create(['role' => 'credencializador']);
 
         $solicitud = SolicitudCredencial::create([
             'numero_tarjeta' => 'TARJ-TEST-18',
@@ -791,7 +791,7 @@ class SolicitudPrefiltroEnginePhaseTwoThreeTest extends TestCase
 
     public function test_19_regresion_de_importacion_alta_de_solicitudes_y_modal(): void
     {
-        $user = User::factory()->create();
+        $user = User::factory()->create(['role' => 'credencializador']);
         $this->actingAs($user);
 
         // Verificamos que la pantalla de listado de credencialización renderice el botón y modal

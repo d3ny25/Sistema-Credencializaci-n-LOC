@@ -34,7 +34,7 @@ class SolicitudDetalleElementosViewTest extends TestCase
 
         AgrupamientoInstitucional::limpiarCache();
 
-        $this->user = User::factory()->create();
+        $this->user = User::factory()->create(['role' => 'credencializador']);
 
         $this->batch = LocImportBatch::create([
             'tipo_fuente' => 'catalogo_organizacional_loc',

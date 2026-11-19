@@ -19,7 +19,7 @@ class SolicitudPrefiltroSchemaPhaseTwoTest extends TestCase
 
     public function test_solicitud_persists_prefiltro_metrics_and_sources_snapshot_with_json_cast(): void
     {
-        $evaluador = User::factory()->create();
+        $evaluador = User::factory()->create(['role' => 'credencializador']);
 
         $fuentesSnapshot = [
             'personal_batch_id' => 5,

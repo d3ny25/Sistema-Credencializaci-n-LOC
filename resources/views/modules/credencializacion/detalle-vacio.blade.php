@@ -14,11 +14,8 @@
         @endforeach
     </div>
     <div class="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-3">
-        @foreach (['Elementos recibidos', 'Aptos', 'Descartados'] as $label)
-            <div class="rounded-lg border border-slate-200 p-4">
-                <p class="text-xs text-tx-soft">{{ $label }}</p>
-                <p class="mt-2 text-2xl font-semibold text-inst-900">—</p>
-            </div>
+        @foreach (['Elementos recibidos' => 'users', 'Aptos' => 'check', 'Descartados' => 'alert'] as $label => $icono)
+            <x-kpi :label="$label" value="—" :icon="$icono" tone="neutral" variant="compact"/>
         @endforeach
     </div>
 </x-card>

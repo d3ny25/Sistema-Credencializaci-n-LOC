@@ -108,21 +108,8 @@ class BiometricDeliveryService
             throw new UnprocessableEntityHttpException('El archivo biométrico no posee un estado técnico válido.');
         }
 
-        // 8. Comprobar existencia en disco de ingesta o en disco histórico de solo lectura
-        if (config('filesystems.disks.biometricos_ingesta') && Storage::disk('biometricos_ingesta')->fileExists($archivo->ruta_relativa)) {
-            $disk = Storage::disk('biometricos_ingesta');
-        } else {
-            $disk = Storage::disk('biometricos');
-            $adapter = $disk->getAdapter();
-            if ($adapter instanceof SafeReadOnlyLocalAdapter) {
-                $adapter->assertSafePath($archivo->ruta_relativa);
-            }
-
-            // 9. Comprobar que el archivo exista físicamente en el repositorio
-            if (! $disk->fileExists($archivo->ruta_relativa)) {
-                throw new NotFoundHttpException('El archivo biométrico no existe físicamente en el repositorio.');
-            }
-        }
+        // 8-9. Disco de ingesta o disco histórico de solo lectura, con el archivo presente
+        $disk = $this->discoDeArchivo($archivo);
 
         // 10. Registrar la auditoría pericial con snapshots inmutables ANTES de iniciar el streaming
         BiometricoAuditoria::registrarAcceso(
@@ -176,6 +163,31 @@ class BiometricDeliveryService
                 }
             }
         }, 200, $headers);
+    }
+
+    /**
+     * Disco donde reside físicamente un archivo biométrico: ingesta si existe ahí; si no, el
+     * repositorio institucional de solo lectura (con validación de ruta segura).
+     *
+     * @throws NotFoundHttpException Si el archivo no existe en ninguno de los dos.
+     */
+    public function discoDeArchivo(BiometricoArchivo $archivo): \Illuminate\Filesystem\FilesystemAdapter
+    {
+        if (config('filesystems.disks.biometricos_ingesta') && Storage::disk('biometricos_ingesta')->fileExists($archivo->ruta_relativa)) {
+            return Storage::disk('biometricos_ingesta');
+        }
+
+        $disk = Storage::disk('biometricos');
+        $adapter = $disk->getAdapter();
+        if ($adapter instanceof SafeReadOnlyLocalAdapter) {
+            $adapter->assertSafePath($archivo->ruta_relativa);
+        }
+
+        if (! $disk->fileExists($archivo->ruta_relativa)) {
+            throw new NotFoundHttpException('El archivo biométrico no existe físicamente en el repositorio.');
+        }
+
+        return $disk;
     }
 }
 
